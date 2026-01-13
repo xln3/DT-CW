@@ -9,7 +9,9 @@ import AdminLayout from './components/Layout/AdminLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/admin/Dashboard';
 import { MemberList, MemberForm } from './pages/admin/members';
+import { TeacherList, TeacherForm } from './pages/admin/teachers';
 import { ProgramList } from './pages/admin/programs';
+import { RehearsalList, RehearsalForm } from './pages/admin/rehearsals';
 
 // Query client
 const queryClient = new QueryClient({
@@ -73,33 +75,7 @@ function HomePage() {
   );
 }
 
-// Placeholder pages
-function TeacherList() {
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">教师管理</h1>
-      <div className="card">
-        <div className="card-body text-center py-12">
-          <p className="text-gray-500">教师管理功能开发中...</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RehearsalList() {
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">排练管理</h1>
-      <div className="card">
-        <div className="card-body text-center py-12">
-          <p className="text-gray-500">排练管理功能开发中...</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+// Placeholder page
 function Settings() {
   return (
     <div className="space-y-6">
@@ -135,12 +111,16 @@ function App() {
 
                 {/* Teachers */}
                 <Route path="/admin/teachers" element={<TeacherList />} />
+                <Route path="/admin/teachers/new" element={<TeacherForm />} />
+                <Route path="/admin/teachers/:id/edit" element={<TeacherForm />} />
 
                 {/* Programs */}
                 <Route path="/admin/programs" element={<ProgramList />} />
 
                 {/* Rehearsals */}
                 <Route path="/admin/rehearsals" element={<RehearsalList />} />
+                <Route path="/admin/rehearsals/new" element={<RehearsalForm />} />
+                <Route path="/admin/rehearsals/:id/edit" element={<RehearsalForm />} />
 
                 {/* Settings */}
                 <Route path="/admin/settings" element={<Settings />} />
