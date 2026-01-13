@@ -10,8 +10,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/admin/Dashboard';
 import { MemberList, MemberForm } from './pages/admin/members';
 import { TeacherList, TeacherForm } from './pages/admin/teachers';
-import { ProgramList } from './pages/admin/programs';
-import { RehearsalList, RehearsalForm } from './pages/admin/rehearsals';
+import { ProgramList, ProgramForm, ProgramDetail } from './pages/admin/programs';
+import { RehearsalList, RehearsalForm, RehearsalDetail } from './pages/admin/rehearsals';
 
 // Query client
 const queryClient = new QueryClient({
@@ -116,10 +116,14 @@ function App() {
 
                 {/* Programs */}
                 <Route path="/admin/programs" element={<ProgramList />} />
+                <Route path="/admin/programs/new" element={<ProgramForm />} />
+                <Route path="/admin/programs/:id" element={<ProgramDetail />} />
+                <Route path="/admin/programs/:id/edit" element={<ProgramForm />} />
 
                 {/* Rehearsals */}
                 <Route path="/admin/rehearsals" element={<RehearsalList />} />
                 <Route path="/admin/rehearsals/new" element={<RehearsalForm />} />
+                <Route path="/admin/rehearsals/:id" element={<RehearsalDetail />} />
                 <Route path="/admin/rehearsals/:id/edit" element={<RehearsalForm />} />
 
                 {/* Settings */}
