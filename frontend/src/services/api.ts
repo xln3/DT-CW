@@ -292,6 +292,35 @@ export const rehearsalsApi = {
   },
 };
 
+// Dashboard API
+export const dashboardApi = {
+  getStats: async () => {
+    const response = await api.get<{
+      stats: {
+        member_count: number;
+        teacher_count: number;
+        program_count: number;
+        week_rehearsal_count: number;
+      };
+      upcoming_rehearsals: {
+        id: number;
+        program_name: string;
+        date: string;
+        start_time: string | null;
+        location: string | null;
+      }[];
+      recent_programs: {
+        id: number;
+        name: string;
+        category: string;
+        member_count: number;
+        rehearsal_count: number;
+      }[];
+    }>('/admin/dashboard/stats');
+    return response.data;
+  },
+};
+
 // Public API (no auth required)
 export const publicApi = {
   getAttendanceOverview: async (semesterId?: number) => {
