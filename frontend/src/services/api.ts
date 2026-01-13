@@ -321,6 +321,110 @@ export const dashboardApi = {
   },
 };
 
+// Users API
+export const usersApi = {
+  list: async () => {
+    const response = await api.get<{
+      users: User[];
+    }>('/admin/users');
+    return response.data.users;
+  },
+
+  get: async (id: number) => {
+    const response = await api.get<{ user: User }>(`/admin/users/${id}`);
+    return response.data.user;
+  },
+
+  create: async (data: {
+    username: string;
+    password: string;
+    display_name: string;
+    role: string;
+    email?: string;
+    phone?: string;
+  }) => {
+    const response = await api.post<{ user: User }>('/admin/users', data);
+    return response.data.user;
+  },
+
+  update: async (
+    id: number,
+    data: {
+      display_name?: string;
+      role?: string;
+      email?: string;
+      phone?: string;
+      status?: string;
+      password?: string;
+    }
+  ) => {
+    const response = await api.put<{ user: User }>(`/admin/users/${id}`, data);
+    return response.data.user;
+  },
+
+  delete: async (id: number) => {
+    await api.delete(`/admin/users/${id}`);
+  },
+};
+
+// Semesters API
+export const semestersApi = {
+  list: async () => {
+    const response = await api.get<{
+      semesters: {
+        id: number;
+        name: string;
+        start_date: string | null;
+        end_date: string | null;
+        is_current: boolean;
+      }[];
+    }>('/admin/semesters');
+    return response.data.semesters;
+  },
+
+  get: async (id: number) => {
+    const response = await api.get(`/admin/semesters/${id}`);
+    return response.data.semester;
+  },
+
+  create: async (data: {
+    name: string;
+    start_date?: string;
+    end_date?: string;
+    is_current?: boolean;
+  }) => {
+    const response = await api.post('/admin/semesters', data);
+    return response.data.semester;
+  },
+
+  update: async (
+    id: number,
+    data: {
+      name?: string;
+      start_date?: string;
+      end_date?: string;
+      is_current?: boolean;
+    }
+  ) => {
+    const response = await api.put(`/admin/semesters/${id}`, data);
+    return response.data.semester;
+  },
+
+  delete: async (id: number) => {
+    await api.delete(`/admin/semesters/${id}`);
+  },
+
+  setCurrent: async (id: number) => {
+    const response = await api.post(`/admin/semesters/${id}/set-current`);
+    return response.data.semester;
+  },
+
+  getCurrent: async () => {
+    const response = await api.get('/admin/semesters/current');
+    return response.data.semester;
+  },
+};
+
 // Public API (no auth required)
 export const publicApi = {
   getAttendanceOverview: async (semesterId?: number) => {

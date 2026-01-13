@@ -12,6 +12,7 @@ def register_blueprints(app: Flask):
     from .rehearsals import rehearsals_bp
     from .public_attendance import public_attendance_bp
     from .dashboard import dashboard_bp
+    from .semesters import semesters_bp
 
     # Auth routes
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -23,6 +24,7 @@ def register_blueprints(app: Flask):
     app.register_blueprint(programs_bp, url_prefix='/api/admin/programs')
     app.register_blueprint(rehearsals_bp, url_prefix='/api/admin/rehearsals')
     app.register_blueprint(dashboard_bp, url_prefix='/api/admin/dashboard')
+    app.register_blueprint(semesters_bp, url_prefix='/api/admin/semesters')
 
     # Public routes
     app.register_blueprint(public_attendance_bp, url_prefix='/api/public/attendance')

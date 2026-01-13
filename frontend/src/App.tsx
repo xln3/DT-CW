@@ -13,6 +13,7 @@ import { MemberList, MemberForm } from './pages/admin/members';
 import { TeacherList, TeacherForm } from './pages/admin/teachers';
 import { ProgramList, ProgramForm, ProgramDetail } from './pages/admin/programs';
 import { RehearsalList, RehearsalForm, RehearsalDetail } from './pages/admin/rehearsals';
+import { SemesterList, UserList, SettingsHub } from './pages/admin/settings';
 import { Home, AttendanceOverview, ProgramAttendance, AttendanceSearch } from './pages/public';
 
 // Query client
@@ -56,19 +57,6 @@ function PublicLayoutWrapper() {
   );
 }
 
-// Placeholder page
-function Settings() {
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">系统设置</h1>
-      <div className="card">
-        <div className="card-body text-center py-12">
-          <p className="text-gray-500">系统设置功能开发中...</p>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function App() {
   return (
@@ -115,7 +103,9 @@ function App() {
                 <Route path="/admin/rehearsals/:id/edit" element={<RehearsalForm />} />
 
                 {/* Settings */}
-                <Route path="/admin/settings" element={<Settings />} />
+                <Route path="/admin/settings" element={<SettingsHub />} />
+                <Route path="/admin/settings/semesters" element={<SemesterList />} />
+                <Route path="/admin/settings/users" element={<UserList />} />
               </Route>
             </Route>
 

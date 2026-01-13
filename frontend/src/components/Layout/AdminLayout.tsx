@@ -48,7 +48,6 @@ const navItems: NavItem[] = [
     name: '系统设置',
     path: '/admin/settings',
     icon: <Settings className="w-5 h-5" />,
-    permissions: ['system:config'],
   },
 ];
 
