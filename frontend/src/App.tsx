@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Layouts
 import AdminLayout from './components/Layout/AdminLayout';
+import PublicLayout from './components/Layout/PublicLayout';
 
 // Pages
 import Login from './pages/Login';
@@ -12,6 +13,7 @@ import { MemberList, MemberForm } from './pages/admin/members';
 import { TeacherList, TeacherForm } from './pages/admin/teachers';
 import { ProgramList, ProgramForm, ProgramDetail } from './pages/admin/programs';
 import { RehearsalList, RehearsalForm, RehearsalDetail } from './pages/admin/rehearsals';
+import { Home, AttendanceOverview, ProgramAttendance, AttendanceSearch } from './pages/public';
 
 // Query client
 const queryClient = new QueryClient({
@@ -45,33 +47,12 @@ function ProtectedRoute() {
   return <Outlet />;
 }
 
-// Public home page (placeholder)
-function HomePage() {
+// Public layout wrapper
+function PublicLayoutWrapper() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-primary-600">艺术团综合管理系统</h1>
-          <a href="/login" className="btn-primary">
-            登录管理后台
-          </a>
-        </div>
-      </header>
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="card">
-          <div className="card-body text-center py-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">欢迎访问艺术团管理系统</h2>
-            <p className="text-gray-600 mb-6">
-              查看考勤公示、场地日历、预算公开等公开信息
-            </p>
-            <div className="flex justify-center space-x-4">
-              <a href="/attendance" className="btn-secondary">考勤公示</a>
-              <a href="/calendar" className="btn-secondary">队历日历</a>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
+    <PublicLayout>
+      <Outlet />
+    </PublicLayout>
   );
 }
 
@@ -95,9 +76,16 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<HomePage />} />
+            {/* Login (standalone) */}
             <Route path="/login" element={<Login />} />
+
+            {/* Public routes with layout */}
+            <Route element={<PublicLayoutWrapper />}>
+              <Route path="/" element={<Home />} />
+              <Route path="/attendance" element={<AttendanceOverview />} />
+              <Route path="/attendance/programs/:id" element={<ProgramAttendance />} />
+              <Route path="/attendance/search" element={<AttendanceSearch />} />
+            </Route>
 
             {/* Protected admin routes */}
             <Route element={<ProtectedRoute />}>

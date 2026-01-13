@@ -2,7 +2,7 @@
 from flask import Blueprint, request, jsonify
 
 from database import db
-from models import Program, Member, Rehearsal, Attendance, Semester
+from models import Program, Member, Rehearsal, Attendance, Semester, ProgramMember
 
 public_attendance_bp = Blueprint('public_attendance', __name__)
 
@@ -16,27 +16,46 @@ def attendance_overview():
         current_semester = Semester.get_current()
         semester_id = current_semester.id if current_semester else None
 
-    if not semester_id:
-        return jsonify({'error': '未设置当前学期'}), 400
+    semester = None
+    if semester_id:
+        semester = Semester.query.get(semester_id)
 
     programs = Program.query.filter_by(
-        semester_id=semester_id,
         status='active'
     ).order_by(Program.name).all()
 
-    overview = []
+    if semester_id:
+        programs = [p for p in programs if p.semester_id == semester_id]
+
+    # Calculate overall stats
+    total_members = set()
+    total_rehearsals = 0
+    all_attendance_rates = []
+
+    program_list = []
     for program in programs:
         rehearsals = program.rehearsals.all()
-        total_rehearsals = len(rehearsals)
+        num_rehearsals = len(rehearsals)
+        total_rehearsals += num_rehearsals
 
-        if total_rehearsals == 0:
-            overview.append({
-                'program_id': program.id,
-                'program_name': program.name,
-                'category': program.category,
-                'member_count': program.members.filter_by(status='active').count(),
+        # Get member count
+        member_count = ProgramMember.query.filter_by(
+            program_id=program.id,
+            status='active'
+        ).count()
+
+        # Add to total members
+        for pm in ProgramMember.query.filter_by(program_id=program.id, status='active'):
+            total_members.add(pm.member_id)
+
+        if num_rehearsals == 0:
+            program_list.append({
+                'id': program.id,
+                'name': program.name,
+                'category': program.category or '',
+                'member_count': member_count,
                 'rehearsal_count': 0,
-                'avg_attendance_rate': 0
+                'attendance_rate': 100.0
             })
             continue
 
@@ -55,20 +74,32 @@ def attendance_overview():
                 ]:
                     present_count += 1
 
-        avg_rate = (present_count / total_records * 100) if total_records > 0 else 0
+        attendance_rate = (present_count / total_records * 100) if total_records > 0 else 100.0
+        all_attendance_rates.append(attendance_rate)
 
-        overview.append({
-            'program_id': program.id,
-            'program_name': program.name,
-            'category': program.category,
-            'member_count': program.members.filter_by(status='active').count(),
-            'rehearsal_count': total_rehearsals,
-            'avg_attendance_rate': round(avg_rate, 1)
+        program_list.append({
+            'id': program.id,
+            'name': program.name,
+            'category': program.category or '',
+            'member_count': member_count,
+            'rehearsal_count': num_rehearsals,
+            'attendance_rate': round(attendance_rate, 1)
         })
 
+    avg_rate = sum(all_attendance_rates) / len(all_attendance_rates) if all_attendance_rates else 100.0
+
     return jsonify({
-        'semester_id': semester_id,
-        'overview': overview
+        'semester': {
+            'id': semester.id,
+            'name': semester.name
+        } if semester else None,
+        'programs': program_list,
+        'overall_stats': {
+            'total_members': len(total_members),
+            'total_programs': len(programs),
+            'total_rehearsals': total_rehearsals,
+            'average_attendance_rate': round(avg_rate, 1)
+        }
     })
 
 
@@ -78,75 +109,95 @@ def program_attendance(program_id):
     program = Program.query.get_or_404(program_id)
 
     rehearsals = program.rehearsals.order_by(Rehearsal.scheduled_date.desc()).all()
-    members = [pm.member for pm in program.members.filter_by(status='active')]
 
-    # Build attendance matrix
-    member_stats = {}
+    # Get active members
+    program_members = ProgramMember.query.filter_by(
+        program_id=program.id,
+        status='active'
+    ).all()
+    members = [pm.member for pm in program_members if pm.member]
+
+    # Build member stats
+    member_list = []
     for member in members:
-        member_stats[member.id] = {
+        stats = {
             'member_id': member.id,
             'member_name': member.name,
-            'total': 0,
-            'normal': 0,
-            'late': 0,
-            'early_leave': 0,
-            'absent': 0,
-            'leave': 0,
-            'attendance_rate': 0
+            'student_id': member.student_id or '',
+            'total_rehearsals': 0,
+            'normal_count': 0,
+            'late_count': 0,
+            'absent_count': 0,
+            'leave_count': 0,
+            'attendance_rate': 100.0
         }
 
-    rehearsal_list = []
-    for rehearsal in rehearsals:
-        r_data = {
-            'rehearsal_id': rehearsal.id,
-            'date': rehearsal.scheduled_date.isoformat(),
-            'start_time': rehearsal.scheduled_start_time.isoformat() if rehearsal.scheduled_start_time else None,
-            'end_time': rehearsal.scheduled_end_time.isoformat() if rehearsal.scheduled_end_time else None,
-            'location': rehearsal.location,
-            'attendance': {}
-        }
+        # Calculate stats from attendance records
+        for rehearsal in rehearsals:
+            record = Attendance.query.filter_by(
+                rehearsal_id=rehearsal.id,
+                member_id=member.id
+            ).first()
 
-        for record in rehearsal.attendance_records:
-            if record.member_id in member_stats:
-                stats = member_stats[record.member_id]
-                stats['total'] += 1
-
+            if record:
+                stats['total_rehearsals'] += 1
                 if record.status == Attendance.STATUS_NORMAL:
-                    stats['normal'] += 1
+                    stats['normal_count'] += 1
                 elif record.status == Attendance.STATUS_LATE:
-                    stats['late'] += 1
-                elif record.status == Attendance.STATUS_EARLY_LEAVE:
-                    stats['early_leave'] += 1
-                elif record.status == Attendance.STATUS_ABSENT:
-                    stats['absent'] += 1
+                    stats['late_count'] += 1
+                elif record.status in [Attendance.STATUS_EARLY_LEAVE, Attendance.STATUS_ABSENT]:
+                    stats['absent_count'] += 1
                 elif record.status in [
                     Attendance.STATUS_LEAVE_ABSENT,
                     Attendance.STATUS_LEAVE_LATE,
                     Attendance.STATUS_LEAVE_EARLY
                 ]:
-                    stats['leave'] += 1
+                    stats['leave_count'] += 1
 
-                r_data['attendance'][record.member_id] = {
-                    'status': record.status,
-                    'status_display': Attendance.get_status_display(record.status)
-                }
+        # Calculate attendance rate
+        if stats['total_rehearsals'] > 0:
+            effective = stats['normal_count'] + stats['leave_count']
+            stats['attendance_rate'] = round(effective / stats['total_rehearsals'] * 100, 1)
 
-        rehearsal_list.append(r_data)
+        member_list.append(stats)
 
-    # Calculate attendance rate for each member
-    for stats in member_stats.values():
-        if stats['total'] > 0:
-            effective = stats['normal'] + stats['leave']
-            stats['attendance_rate'] = round(effective / stats['total'] * 100, 1)
+    # Build rehearsal list
+    rehearsal_list = []
+    for rehearsal in rehearsals[:20]:  # Last 20 rehearsals
+        records = rehearsal.attendance_records.all()
+        total = len(records)
+        present = sum(1 for r in records if r.status in [
+            Attendance.STATUS_NORMAL,
+            Attendance.STATUS_LEAVE_ABSENT,
+            Attendance.STATUS_LEAVE_LATE,
+            Attendance.STATUS_LEAVE_EARLY
+        ])
+
+        rehearsal_list.append({
+            'id': rehearsal.id,
+            'date': rehearsal.scheduled_date.isoformat(),
+            'location': rehearsal.location or '',
+            'attendance_rate': round(present / total * 100, 1) if total > 0 else 100.0
+        })
+
+    # Calculate overall stats
+    total_rehearsals = len(rehearsals)
+    total_members = len(members)
+    avg_rate = sum(m['attendance_rate'] for m in member_list) / len(member_list) if member_list else 100.0
 
     return jsonify({
         'program': {
             'id': program.id,
             'name': program.name,
-            'category': program.category
+            'category': program.category or ''
         },
-        'members': list(member_stats.values()),
-        'rehearsals': rehearsal_list
+        'stats': {
+            'total_rehearsals': total_rehearsals,
+            'total_members': total_members,
+            'average_attendance_rate': round(avg_rate, 1)
+        },
+        'members': member_list,
+        'recent_rehearsals': rehearsal_list
     })
 
 
@@ -173,14 +224,27 @@ def member_attendance():
 
     results = []
     for member in members:
-        # Get programs in current semester
+        # Get all program memberships
+        program_memberships = ProgramMember.query.filter_by(
+            member_id=member.id,
+            status='active'
+        ).all()
+
         programs_data = []
-        for pm in member.program_memberships.filter_by(status='active'):
+        total_stats = {
+            'total_rehearsals': 0,
+            'normal_count': 0,
+            'late_count': 0,
+            'absent_count': 0,
+            'leave_count': 0
+        }
+
+        for pm in program_memberships:
             program = pm.program
-            if program.semester_id != semester_id:
+            if semester_id and program.semester_id != semester_id:
                 continue
 
-            # Get attendance stats for this program
+            # Get attendance records
             records = Attendance.query.join(Rehearsal).filter(
                 Attendance.member_id == member.id,
                 Rehearsal.program_id == program.id
@@ -188,31 +252,56 @@ def member_attendance():
 
             total = len(records)
             normal = sum(1 for r in records if r.status == Attendance.STATUS_NORMAL)
+            late = sum(1 for r in records if r.status == Attendance.STATUS_LATE)
+            absent = sum(1 for r in records if r.status in [Attendance.STATUS_ABSENT, Attendance.STATUS_EARLY_LEAVE])
             leave = sum(1 for r in records if r.status in [
                 Attendance.STATUS_LEAVE_ABSENT,
                 Attendance.STATUS_LEAVE_LATE,
                 Attendance.STATUS_LEAVE_EARLY
             ])
-            absent = sum(1 for r in records if r.status == Attendance.STATUS_ABSENT)
+
+            # Add to totals
+            total_stats['total_rehearsals'] += total
+            total_stats['normal_count'] += normal
+            total_stats['late_count'] += late
+            total_stats['absent_count'] += absent
+            total_stats['leave_count'] += leave
 
             programs_data.append({
                 'program_id': program.id,
                 'program_name': program.name,
                 'total_rehearsals': total,
-                'normal': normal,
-                'leave': leave,
-                'absent': absent,
-                'attendance_rate': round((normal + leave) / total * 100, 1) if total > 0 else 0
+                'normal_count': normal,
+                'late_count': late,
+                'absent_count': absent,
+                'leave_count': leave,
+                'attendance_rate': round((normal + leave) / total * 100, 1) if total > 0 else 100.0
             })
 
+        # Calculate overall rate
+        overall_rate = 100.0
+        if total_stats['total_rehearsals'] > 0:
+            effective = total_stats['normal_count'] + total_stats['leave_count']
+            overall_rate = round(effective / total_stats['total_rehearsals'] * 100, 1)
+
         results.append({
-            'member_id': member.id,
-            'name': member.name,
-            'student_id': member.student_id,
-            'department': member.department,
-            'programs': programs_data
+            'member': {
+                'id': member.id,
+                'name': member.name,
+                'student_id': member.student_id or '',
+                'department': member.department or ''
+            },
+            'programs': programs_data,
+            'overall_stats': {
+                'total_rehearsals': total_stats['total_rehearsals'],
+                'normal_count': total_stats['normal_count'],
+                'late_count': total_stats['late_count'],
+                'absent_count': total_stats['absent_count'],
+                'leave_count': total_stats['leave_count'],
+                'attendance_rate': overall_rate
+            }
         })
 
     return jsonify({
-        'members': results
+        'results': results
     })
