@@ -1,0 +1,208 @@
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { Plus, Search, Edit2, Trash2, AlertCircle } from 'lucide-react';
+import { membersApi } from '../../../services/api';
+import { useAuth } from '../../../contexts/AuthContext';
+import type { Member } from '../../../types';
+
+export default function MemberList() {
+  const [members, setMembers] = useState<Member[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+
+  const { hasRole } = useAuth();
+  const canEdit = hasRole('admin', 'committee');
+
+  const fetchMembers = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const data = await membersApi.list({
+        search: search || undefined,
+        status: statusFilter || undefined,
+      });
+      setMembers(data);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '加载失败');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMembers();
+  }, [statusFilter]);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchMembers();
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      await membersApi.delete(id);
+      setMembers(members.filter((m) => m.id !== id));
+      setDeleteConfirm(null);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '删除失败');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">队员管理</h1>
+          <p className="mt-1 text-sm text-gray-500">管理艺术团所有队员信息</p>
+        </div>
+        {canEdit && (
+          <Link to="/admin/members/new" className="btn-primary">
+            <Plus className="w-4 h-4 mr-2" />
+            添加队员
+          </Link>
+        )}
+      </div>
+
+      {/* Filters */}
+      <div className="card">
+        <div className="card-body">
+          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="搜索姓名、学号或院系..."
+                  className="form-input pl-10"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+            </div>
+            <select
+              className="form-input w-full sm:w-40"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">全部状态</option>
+              <option value="active">在队</option>
+              <option value="inactive">离队</option>
+            </select>
+            <button type="submit" className="btn-primary">
+              搜索
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Error message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
+          <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />
+          <span className="text-sm text-red-700">{error}</span>
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>姓名</th>
+                <th>学号</th>
+                <th>院系</th>
+                <th>年级</th>
+                <th>状态</th>
+                {canEdit && <th className="text-right">操作</th>}
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={canEdit ? 6 : 5} className="text-center py-8">
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                      <span className="ml-3 text-gray-500">加载中...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : members.length === 0 ? (
+                <tr>
+                  <td colSpan={canEdit ? 6 : 5} className="text-center py-8 text-gray-500">
+                    暂无队员数据
+                  </td>
+                </tr>
+              ) : (
+                members.map((member) => (
+                  <tr key={member.id} className="hover:bg-gray-50">
+                    <td className="font-medium">{member.name}</td>
+                    <td>{member.student_id || '-'}</td>
+                    <td>{member.department || '-'}</td>
+                    <td>{member.grade || '-'}</td>
+                    <td>
+                      <span
+                        className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                          member.status === 'active'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {member.status === 'active' ? '在队' : '离队'}
+                      </span>
+                    </td>
+                    {canEdit && (
+                      <td className="text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                          <Link
+                            to={`/admin/members/${member.id}/edit`}
+                            className="p-2 text-gray-400 hover:text-primary-600"
+                            title="编辑"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Link>
+                          {deleteConfirm === member.id ? (
+                            <div className="flex items-center space-x-1">
+                              <button
+                                onClick={() => handleDelete(member.id)}
+                                className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                              >
+                                确认
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirm(null)}
+                                className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                              >
+                                取消
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setDeleteConfirm(member.id)}
+                              className="p-2 text-gray-400 hover:text-red-600"
+                              title="删除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Summary */}
+      {!isLoading && members.length > 0 && (
+        <div className="text-sm text-gray-500">共 {members.length} 名队员</div>
+      )}
+    </div>
+  );
+}
