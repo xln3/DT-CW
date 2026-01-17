@@ -16,7 +16,7 @@ import { RehearsalList, RehearsalForm, RehearsalDetail } from './pages/admin/reh
 import { CalendarList } from './pages/admin/calendar';
 import { VenueList, VenueForm, VenueSchedule } from './pages/admin/venues';
 import { BudgetList } from './pages/admin/budget';
-import { SemesterList, UserList, SettingsHub } from './pages/admin/settings';
+import { SemesterList, UserList, SettingsHub, Profile } from './pages/admin/settings';
 import { AttendanceOverview, ProgramAttendance, AttendanceSearch } from './pages/public';
 import Calendar from './pages/public/Calendar';
 
@@ -124,6 +124,7 @@ function App() {
                 <Route path="/admin/settings" element={<SettingsHub />} />
                 <Route path="/admin/settings/semesters" element={<SemesterList />} />
                 <Route path="/admin/settings/users" element={<UserList />} />
+                <Route path="/admin/settings/profile" element={<Profile />} />
               </Route>
             </Route>
 

@@ -29,10 +29,10 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
             <div className="flex items-center">
               <Link to="/" className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-xl">艺</span>
+                  <span className="text-white font-bold text-lg">DT</span>
                 </div>
                 <span className="text-xl font-bold text-gray-900">
-                  艺术团管理系统
+                  THUDT 2026寒训
                 </span>
               </Link>
             </div>
@@ -102,9 +102,9 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
 
       {/* Footer */}
       <footer className="bg-white border-t mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <p className="text-center text-sm text-gray-500">
-            艺术团综合管理系统 &copy; {new Date().getFullYear()}
+            THUDT 2026寒训 &copy; {new Date().getFullYear()}
           </p>
         </div>
       </footer>

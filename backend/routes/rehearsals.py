@@ -209,6 +209,10 @@ def update_rehearsal(rehearsal_id):
     if 'videos' in data:
         rehearsal.set_videos(data['videos'])
 
+    if 'status' in data:
+        if data['status'] in ['scheduled', 'completed', 'cancelled']:
+            rehearsal.status = data['status']
+
     db.session.commit()
 
     # Log

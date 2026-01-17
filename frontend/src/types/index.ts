@@ -51,14 +51,28 @@ export interface Teacher {
 }
 
 // Semester types
+export type SemesterType = 'summer_training' | 'fall' | 'winter_training' | 'spring';
+
 export interface Semester {
   id: number;
   name: string;
+  semester_type: SemesterType;
   start_date: string;
   end_date: string;
   is_current: boolean;
   created_at: string;
 }
+
+export const SEMESTER_TYPES = [
+  { value: 'summer_training' as SemesterType, label: '暑训' },
+  { value: 'fall' as SemesterType, label: '秋季' },
+  { value: 'winter_training' as SemesterType, label: '寒训' },
+  { value: 'spring' as SemesterType, label: '春季' },
+];
+
+export const isTrainingPeriod = (type: SemesterType): boolean => {
+  return type === 'summer_training' || type === 'winter_training';
+};
 
 // Program types
 export interface Program {
@@ -66,10 +80,12 @@ export interface Program {
   name: string;
   category?: string;
   description?: string;
+  display_color?: string;
   semester_id?: number;
   status: 'active' | 'completed' | 'cancelled';
   member_count: number;
   rehearsal_count: number;
+  completed_rehearsal_count: number;
   created_at: string;
   updated_at: string;
   members?: ProgramMember[];
@@ -88,6 +104,8 @@ export interface ProgramMember {
 }
 
 // Rehearsal types
+export type RehearsalStatus = 'scheduled' | 'completed' | 'cancelled';
+
 export interface Rehearsal {
   id: number;
   program_id: number;
@@ -98,6 +116,7 @@ export interface Rehearsal {
   scheduled_start_time?: string;
   scheduled_end_time?: string;
   location?: string;
+  status: RehearsalStatus;
   before_photo_path?: string;
   after_photo_path?: string;
   before_photo_status: 'pending' | 'uploaded' | 'processed';
@@ -109,6 +128,12 @@ export interface Rehearsal {
   updated_at: string;
   attendance?: Attendance[];
 }
+
+export const REHEARSAL_STATUS_DISPLAY: Record<RehearsalStatus, string> = {
+  scheduled: '已安排',
+  completed: '已完成',
+  cancelled: '已取消',
+};
 
 // Attendance types
 export interface Attendance {
@@ -182,6 +207,7 @@ export interface ProgramForm {
   name: string;
   category?: string;
   description?: string;
+  display_color?: string;
   semester_id?: number;
   status?: 'active' | 'completed' | 'cancelled';
 }
@@ -534,3 +560,32 @@ export const EXPENSE_STATUS_DISPLAY: Record<string, string> = {
   reimbursed: '已报销',
   cancelled: '已取消',
 };
+
+// Schedule types (for week view)
+export interface ScheduleEvent {
+  id: number;
+  program_id: number;
+  program_name: string;
+  program_color: string;
+  category?: string;
+  start_time?: string;
+  end_time?: string;
+  location?: string;
+  teacher_name?: string;
+  notes?: string;
+}
+
+export interface ScheduleProgramInfo {
+  id: number;
+  name: string;
+  display_color: string;
+  category?: string;
+}
+
+export interface WeekScheduleData {
+  semester: Semester;
+  week_start: string;
+  week_end: string;
+  programs: ScheduleProgramInfo[];
+  schedule: Record<string, ScheduleEvent[]>;
+}

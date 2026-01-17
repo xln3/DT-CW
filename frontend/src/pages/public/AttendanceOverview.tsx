@@ -10,6 +10,7 @@ interface ProgramStats {
   category: string;
   member_count: number;
   rehearsal_count: number;
+  completed_rehearsal_count: number;
   attendance_rate: number;
 }
 
@@ -164,7 +165,9 @@ export default function AttendanceOverview() {
                           <Users className="w-4 h-4 mr-1" />
                           {program.member_count} 人
                         </span>
-                        <span>排练 {program.rehearsal_count} 次</span>
+                        <span>
+                          排练 {program.completed_rehearsal_count}/{program.rehearsal_count} 次
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-center space-x-4">

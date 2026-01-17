@@ -23,6 +23,7 @@ interface ProgramAttendanceData {
   };
   stats: {
     total_rehearsals: number;
+    completed_rehearsals: number;
     total_members: number;
     average_attendance_rate: number;
   };
@@ -31,6 +32,7 @@ interface ProgramAttendanceData {
     id: number;
     date: string;
     location: string;
+    status?: string;
     attendance_rate: number;
   }[];
 }
@@ -141,9 +143,9 @@ export default function ProgramAttendance() {
           <div className="card-body text-center">
             <Calendar className="w-8 h-8 text-primary-600 mx-auto mb-2" />
             <p className="text-2xl font-bold text-gray-900">
-              {data.stats.total_rehearsals}
+              {data.stats.completed_rehearsals}/{data.stats.total_rehearsals}
             </p>
-            <p className="text-sm text-gray-500">排练次数</p>
+            <p className="text-sm text-gray-500">已完成/总排练</p>
           </div>
         </div>
         <div className="card col-span-2">

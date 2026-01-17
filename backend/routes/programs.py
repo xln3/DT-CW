@@ -1,8 +1,10 @@
 """Program management routes."""
+import csv
+import io
 from flask import Blueprint, request, jsonify, g
 
 from database import db
-from models import Program, ProgramMember, Member, Semester, AuditLog
+from models import Program, ProgramMember, Member, Semester, AuditLog, User
 from auth.decorators import login_required, committee_required
 from auth.permissions import Permission, check_program_permission
 
@@ -87,6 +89,7 @@ def create_program():
         name=name,
         category=data.get('category', '').strip() or None,
         description=data.get('description', '').strip() or None,
+        display_color=data.get('display_color', '').strip() or '#3498DB',
         semester_id=semester_id,
         status='active'
     )
@@ -137,6 +140,9 @@ def update_program(program_id):
 
     if 'description' in data:
         program.description = data['description'].strip() or None
+
+    if 'display_color' in data:
+        program.display_color = data['display_color'].strip() or '#3498DB'
 
     if 'status' in data and (user.is_admin() or user.is_committee()):
         status = data['status'].strip()
@@ -330,3 +336,151 @@ def remove_program_member(program_id, member_id):
     db.session.commit()
 
     return jsonify({'message': '成员已移除'})
+
+
+@programs_bp.route('/import-csv', methods=['POST'])
+@committee_required
+def import_programs_csv():
+    """Import programs and members from CSV file.
+
+    CSV format (column-based):
+    Row 1: Program names (one per column)
+    Row 2: Member count info (optional, ignored)
+    Row 3+: Member names (one per row, each column belongs to corresponding program)
+    """
+    if 'file' not in request.files:
+        return jsonify({'error': '请上传CSV文件'}), 400
+
+    file = request.files['file']
+    if not file.filename or not file.filename.endswith('.csv'):
+        return jsonify({'error': '请上传CSV格式文件'}), 400
+
+    # Get current semester
+    current_semester = Semester.get_current()
+    if not current_semester:
+        return jsonify({'error': '请先设置当前学期'}), 400
+
+    default_password = request.form.get('default_password', '202601')
+
+    try:
+        # Read CSV content
+        content = file.read().decode('utf-8-sig')  # Handle BOM
+        reader = csv.reader(io.StringIO(content))
+        rows = list(reader)
+
+        if len(rows) < 3:
+            return jsonify({'error': 'CSV格式错误：至少需要3行（节目名、人数说明、成员）'}), 400
+
+        # Row 1: Program names
+        program_names = [name.strip() for name in rows[0] if name.strip()]
+        if not program_names:
+            return jsonify({'error': '未找到节目名称'}), 400
+
+        # Create or get programs
+        programs = []
+        for name in program_names:
+            program = Program.query.filter_by(
+                name=name,
+                semester_id=current_semester.id
+            ).first()
+            if not program:
+                program = Program(
+                    name=name,
+                    semester_id=current_semester.id,
+                    category='dance',  # Default to dance
+                    status='active'
+                )
+                db.session.add(program)
+                db.session.flush()
+            programs.append(program)
+
+        # Row 3+: Members (skip row 2 which is count info)
+        stats = {
+            'programs_created': 0,
+            'members_created': 0,
+            'users_created': 0,
+            'assignments_created': 0,
+        }
+
+        # Track which programs were newly created
+        for p in programs:
+            if p.id is None or db.session.is_modified(p):
+                stats['programs_created'] += 1
+
+        for row_idx, row in enumerate(rows[2:], start=3):
+            for col_idx, member_name in enumerate(row):
+                member_name = member_name.strip()
+                if not member_name or col_idx >= len(programs):
+                    continue
+
+                program = programs[col_idx]
+
+                # Find or create member
+                member = Member.query.filter_by(name=member_name).first()
+                if not member:
+                    member = Member(
+                        name=member_name,
+                        gender='女',  # Default female
+                        status='active'
+                    )
+                    db.session.add(member)
+                    db.session.flush()
+                    stats['members_created'] += 1
+
+                    # Create user account for new member
+                    existing_user = User.query.filter_by(username=member_name).first()
+                    if not existing_user:
+                        user = User(
+                            username=member_name,
+                            display_name=member_name,
+                            role='member',  # Default to regular member role
+                            status='active',
+                            member_id=member.id
+                        )
+                        user.set_password(default_password)
+                        db.session.add(user)
+                        stats['users_created'] += 1
+
+                # Add member to program if not already
+                existing_pm = ProgramMember.query.filter_by(
+                    program_id=program.id,
+                    member_id=member.id
+                ).first()
+
+                if not existing_pm:
+                    pm = ProgramMember(
+                        program_id=program.id,
+                        member_id=member.id,
+                        role='ensemble',
+                        status='active'
+                    )
+                    db.session.add(pm)
+                    stats['assignments_created'] += 1
+                elif existing_pm.status != 'active':
+                    existing_pm.status = 'active'
+                    existing_pm.left_at = None
+                    stats['assignments_created'] += 1
+
+        db.session.commit()
+
+        # Log
+        AuditLog.log(
+            action=AuditLog.ACTION_CREATE,
+            user=g.current_user,
+            module='attendance',
+            resource_type='program_import',
+            details=stats,
+            ip_address=request.remote_addr
+        )
+
+        return jsonify({
+            'message': '导入成功',
+            'stats': stats,
+            'programs': [p.to_dict() for p in programs]
+        })
+
+    except UnicodeDecodeError:
+        return jsonify({'error': 'CSV文件编码错误，请使用UTF-8编码'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'导入失败: {str(e)}'}), 500

@@ -33,8 +33,9 @@ class User(db.Model):
     ROLE_ADMIN = 'admin'
     ROLE_COMMITTEE = 'committee'
     ROLE_PROGRAM_MANAGER = 'program_manager'
+    ROLE_MEMBER = 'member'
 
-    VALID_ROLES = [ROLE_ADMIN, ROLE_COMMITTEE, ROLE_PROGRAM_MANAGER]
+    VALID_ROLES = [ROLE_ADMIN, ROLE_COMMITTEE, ROLE_PROGRAM_MANAGER, ROLE_MEMBER]
 
     def set_password(self, password: str):
         """Hash and set password."""
@@ -61,6 +62,10 @@ class User(db.Model):
     def is_program_manager(self) -> bool:
         """Check if user is program manager."""
         return self.role == self.ROLE_PROGRAM_MANAGER
+
+    def is_member(self) -> bool:
+        """Check if user is regular member."""
+        return self.role == self.ROLE_MEMBER
 
     def can_manage_program(self, program_id: int) -> bool:
         """Check if user can manage a specific program."""

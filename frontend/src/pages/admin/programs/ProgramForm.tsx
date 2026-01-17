@@ -3,7 +3,17 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, AlertCircle } from 'lucide-react';
 import { programsApi } from '../../../services/api';
 import type { ProgramForm as ProgramFormType } from '../../../types';
-import { PROGRAM_CATEGORIES } from '../../../types';
+
+const PRESET_COLORS = [
+  { value: '#3498DB', label: '蓝色' },
+  { value: '#E74C3C', label: '红色' },
+  { value: '#2ECC71', label: '绿色' },
+  { value: '#F39C12', label: '橙色' },
+  { value: '#9B59B6', label: '紫色' },
+  { value: '#1ABC9C', label: '青色' },
+  { value: '#E91E63', label: '粉色' },
+  { value: '#607D8B', label: '灰色' },
+];
 
 export default function ProgramForm() {
   const { id } = useParams();
@@ -15,8 +25,9 @@ export default function ProgramForm() {
   const [error, setError] = useState('');
   const [form, setForm] = useState<ProgramFormType>({
     name: '',
-    category: '',
+    category: 'dance',  // Default to dance, only type needed
     description: '',
+    display_color: '#3498DB',
     status: 'active',
   });
 
@@ -34,6 +45,7 @@ export default function ProgramForm() {
         name: program.name,
         category: program.category || '',
         description: program.description || '',
+        display_color: program.display_color || '#3498DB',
         status: program.status,
       });
     } catch (err: any) {
@@ -128,23 +140,40 @@ export default function ProgramForm() {
             </div>
 
             <div>
-              <label htmlFor="category" className="form-label">
-                节目类型
+              <label className="form-label">
+                展示颜色
               </label>
-              <select
-                id="category"
-                name="category"
-                className="form-input"
-                value={form.category}
-                onChange={handleChange}
-              >
-                <option value="">请选择类型</option>
-                {PROGRAM_CATEGORIES.map((cat) => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1.5">
+                  {PRESET_COLORS.map((color) => (
+                    <button
+                      key={color.value}
+                      type="button"
+                      onClick={() => setForm({ ...form, display_color: color.value })}
+                      className={`w-8 h-8 rounded-md transition-all ${
+                        form.display_color === color.value
+                          ? 'ring-2 ring-offset-2 ring-primary-500 scale-110'
+                          : 'hover:scale-105'
+                      }`}
+                      style={{ backgroundColor: color.value }}
+                      title={color.label}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 ml-2">
+                  <input
+                    type="color"
+                    value={form.display_color}
+                    onChange={(e) => setForm({ ...form, display_color: e.target.value })}
+                    className="w-8 h-8 rounded cursor-pointer border border-gray-300"
+                    title="自定义颜色"
+                  />
+                  <span className="text-sm text-gray-500">{form.display_color}</span>
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                用于时间表中区分不同节目
+              </p>
             </div>
 
             {isEdit && (

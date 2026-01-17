@@ -16,6 +16,9 @@ class Rehearsal(db.Model):
     scheduled_end_time = db.Column(db.Time)
     location = db.Column(db.String(100))
 
+    # Status: scheduled/completed/cancelled
+    status = db.Column(db.String(20), default='scheduled')
+
     # Photos
     before_photo_path = db.Column(db.String(255))
     after_photo_path = db.Column(db.String(255))
@@ -34,6 +37,11 @@ class Rehearsal(db.Model):
     teacher = db.relationship('Teacher', back_populates='rehearsals')
     attendance_records = db.relationship('Attendance', back_populates='rehearsal', lazy='dynamic')
     face_annotations = db.relationship('FaceAnnotation', back_populates='rehearsal', lazy='dynamic')
+
+    # Rehearsal status constants
+    STATUS_SCHEDULED = 'scheduled'
+    STATUS_COMPLETED = 'completed'
+    STATUS_CANCELLED = 'cancelled'
 
     PHOTO_STATUS_PENDING = 'pending'
     PHOTO_STATUS_UPLOADED = 'uploaded'
@@ -61,6 +69,7 @@ class Rehearsal(db.Model):
             'scheduled_start_time': self.scheduled_start_time.isoformat() if self.scheduled_start_time else None,
             'scheduled_end_time': self.scheduled_end_time.isoformat() if self.scheduled_end_time else None,
             'location': self.location,
+            'status': self.status or 'scheduled',
             'before_photo_path': self.before_photo_path,
             'after_photo_path': self.after_photo_path,
             'before_photo_status': self.before_photo_status,

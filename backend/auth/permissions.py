@@ -83,6 +83,12 @@ ROLE_PERMISSIONS = {
         Permission.ATTENDANCE_VIEW, Permission.ATTENDANCE_EDIT,  # Own programs only
         Permission.ANNOTATION_VIEW, Permission.ANNOTATION_EDIT,  # Own programs only
     ],
+    User.ROLE_MEMBER: [
+        # Regular member has minimal permissions (view only for own programs)
+        Permission.PROGRAM_VIEW,  # Own programs only
+        Permission.REHEARSAL_VIEW,  # Own programs only
+        Permission.ATTENDANCE_VIEW,  # Own attendance only
+    ],
 }
 
 

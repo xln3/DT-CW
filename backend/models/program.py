@@ -1,5 +1,5 @@
 """Program and ProgramMember models."""
-from datetime import datetime
+from datetime import datetime, date, time as time_type
 from database import db
 
 
@@ -11,6 +11,7 @@ class Program(db.Model):
     name = db.Column(db.String(100), nullable=False)
     category = db.Column(db.String(50))  # dance/choir/drama/orchestra/etc.
     description = db.Column(db.Text)
+    display_color = db.Column(db.String(20), default='#3498DB')  # Color for schedule display
     semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id'))
     status = db.Column(db.String(20), default='active')  # active/completed/cancelled
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -43,15 +44,40 @@ class Program(db.Model):
 
     def to_dict(self, include_members=False, include_rehearsals=False):
         """Convert to dictionary."""
+        # Import here to avoid circular imports
+        from models.rehearsal import Rehearsal
+
+        # Count total rehearsals (excluding cancelled)
+        total_rehearsals = self.rehearsals.filter(
+            Rehearsal.status != 'cancelled'
+        ).count()
+
+        # Count completed rehearsals (time has passed)
+        now = datetime.now()
+        today = now.date()
+        current_time = now.time()
+
+        completed_count = 0
+        for rehearsal in self.rehearsals.filter(Rehearsal.status != 'cancelled'):
+            if rehearsal.scheduled_date < today:
+                # Past date - completed
+                completed_count += 1
+            elif rehearsal.scheduled_date == today and rehearsal.scheduled_end_time:
+                # Today - check if end time has passed
+                if rehearsal.scheduled_end_time <= current_time:
+                    completed_count += 1
+
         data = {
             'id': self.id,
             'name': self.name,
             'category': self.category,
             'description': self.description,
+            'display_color': self.display_color,
             'semester_id': self.semester_id,
             'status': self.status,
             'member_count': self.members.filter_by(status='active').count(),
-            'rehearsal_count': self.rehearsals.count(),
+            'rehearsal_count': total_rehearsals,
+            'completed_rehearsal_count': completed_count,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

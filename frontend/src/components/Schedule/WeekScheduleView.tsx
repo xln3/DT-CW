@@ -1,0 +1,322 @@
+import { useState, useMemo } from 'react';
+import type { WeekScheduleData, ScheduleEvent } from '../../types';
+import { ScheduleLegend } from './ScheduleLegend';
+
+interface WeekScheduleViewProps {
+  data: WeekScheduleData;
+  onEventClick?: (event: ScheduleEvent) => void;
+  onWeekChange?: (startDate: string) => void;
+  /** Fixed mode for training period - no week navigation, fixed time range */
+  fixedMode?: boolean;
+}
+
+const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+function parseTime(timeStr: string | undefined): number {
+  if (!timeStr) return 0;
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+function formatTime(timeStr: string | undefined): string {
+  if (!timeStr) return '';
+  return timeStr.slice(0, 5);
+}
+
+function getDateInfo(dateStr: string): { dayOfWeek: string; monthDay: string } {
+  const date = new Date(dateStr);
+  const dayIndex = date.getDay();
+  return {
+    dayOfWeek: WEEKDAY_NAMES[dayIndex],
+    monthDay: `${date.getMonth() + 1}/${date.getDate()}`,
+  };
+}
+
+function addDays(dateStr: string, days: number): string {
+  const date = new Date(dateStr);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().split('T')[0];
+}
+
+export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode = false }: WeekScheduleViewProps) {
+  const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
+
+  const dates = useMemo(() => {
+    const result: string[] = [];
+    let current = new Date(data.week_start);
+    const end = new Date(data.week_end);
+    while (current <= end) {
+      result.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+    return result;
+  }, [data.week_start, data.week_end]);
+
+  const timeRange = useMemo(() => {
+    // In fixed mode, use 8:00-22:30 (8*60=480 to 22.5*60=1350)
+    if (fixedMode) {
+      return { start: 8 * 60, end: 22 * 60 + 30 };
+    }
+
+    let minTime = 24 * 60;
+    let maxTime = 0;
+
+    Object.values(data.schedule).forEach((events) => {
+      events.forEach((event) => {
+        const start = parseTime(event.start_time);
+        const end = parseTime(event.end_time);
+        if (start > 0) minTime = Math.min(minTime, start);
+        if (end > 0) maxTime = Math.max(maxTime, end);
+      });
+    });
+
+    if (minTime >= maxTime) {
+      return { start: 8 * 60, end: 20 * 60 };
+    }
+
+    const paddedStart = Math.max(0, Math.floor(minTime / 60) * 60 - 60);
+    const paddedEnd = Math.min(24 * 60, Math.ceil(maxTime / 60) * 60 + 60);
+
+    return { start: paddedStart, end: paddedEnd };
+  }, [data.schedule, fixedMode]);
+
+  const timeSlots = useMemo(() => {
+    const slots: string[] = [];
+    for (let t = timeRange.start; t < timeRange.end; t += 60) {
+      const hours = Math.floor(t / 60);
+      slots.push(`${hours.toString().padStart(2, '0')}:00`);
+    }
+    return slots;
+  }, [timeRange]);
+
+  const handlePrevWeek = () => {
+    onWeekChange?.(addDays(data.week_start, -7));
+  };
+
+  const handleNextWeek = () => {
+    onWeekChange?.(addDays(data.week_start, 7));
+  };
+
+  const handleEventClick = (event: ScheduleEvent) => {
+    setSelectedEvent(event);
+    onEventClick?.(event);
+  };
+
+  const renderEvent = (event: ScheduleEvent) => {
+    const startMin = parseTime(event.start_time);
+    const endMin = parseTime(event.end_time);
+    const duration = endMin - startMin;
+
+    const top = ((startMin - timeRange.start) / (timeRange.end - timeRange.start)) * 100;
+    const height = (duration / (timeRange.end - timeRange.start)) * 100;
+
+    return (
+      <div
+        key={event.id}
+        onClick={() => handleEventClick(event)}
+        className="absolute left-1 right-1 rounded-md overflow-hidden cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 transition-all"
+        style={{
+          top: `${top}%`,
+          height: `${Math.max(height, 4)}%`,
+          backgroundColor: event.program_color,
+        }}
+      >
+        <div className="p-1 h-full flex flex-col text-white text-xs">
+          <span className="font-medium truncate">{event.program_name}</span>
+          {height > 8 && (
+            <>
+              <span className="text-white/80 truncate">
+                {formatTime(event.start_time)}-{formatTime(event.end_time)}
+              </span>
+              {height > 15 && event.location && (
+                <span className="text-white/70 truncate">{event.location}</span>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Calculate pixel height per minute for proper scaling
+  const totalMinutes = timeRange.end - timeRange.start;
+  const pixelsPerMinute = fixedMode ? 1.5 : 1; // Adjust density in fixed mode
+  const gridHeight = totalMinutes * pixelsPerMinute;
+
+  return (
+    <div className={`flex flex-col bg-white rounded-lg shadow-sm ${fixedMode ? '' : 'h-full'}`}>
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b">
+        {fixedMode ? (
+          // Fixed mode: just show title, no navigation
+          <h2 className="text-lg font-semibold text-gray-900">
+            {data.semester.name}
+          </h2>
+        ) : (
+          // Normal mode: show navigation
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handlePrevWeek}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <h2 className="text-lg font-semibold text-gray-900">
+              {data.week_start} ~ {data.week_end}
+            </h2>
+            <button
+              onClick={handleNextWeek}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        )}
+        <div className="text-sm text-gray-500">
+          {data.week_start} ~ {data.week_end}
+        </div>
+      </div>
+
+      {/* Legend */}
+      {data.programs.length > 0 && (
+        <div className="p-4 border-b">
+          <ScheduleLegend programs={data.programs} />
+        </div>
+      )}
+
+      {/* Schedule Grid */}
+      <div className={fixedMode ? 'flex-1' : 'flex-1 overflow-auto'}>
+        <div className={fixedMode ? '' : 'min-w-[800px]'}>
+          {/* Day Headers */}
+          <div className="flex border-b sticky top-0 bg-white z-10">
+            <div className="w-14 flex-shrink-0 p-2 border-r" />
+            {dates.map((date) => {
+              const { dayOfWeek, monthDay } = getDateInfo(date);
+              const isToday = date === new Date().toISOString().split('T')[0];
+              return (
+                <div
+                  key={date}
+                  className={`flex-1 p-2 text-center border-r last:border-r-0 ${
+                    isToday ? 'bg-blue-50' : ''
+                  }`}
+                >
+                  <div className={`font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
+                    {dayOfWeek}
+                  </div>
+                  <div className={`text-sm ${isToday ? 'text-blue-500' : 'text-gray-500'}`}>
+                    {monthDay}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Time Grid */}
+          <div className="flex relative" style={{ height: fixedMode ? `${gridHeight}px` : `${timeSlots.length * 60}px` }}>
+            {/* Time Labels */}
+            <div className="w-14 flex-shrink-0 border-r">
+              {timeSlots.map((time) => (
+                <div
+                  key={time}
+                  className="text-xs text-gray-400 text-right pr-2 -mt-2"
+                  style={{ height: fixedMode ? `${60 * pixelsPerMinute}px` : '60px' }}
+                >
+                  {time}
+                </div>
+              ))}
+            </div>
+
+            {/* Day Columns */}
+            {dates.map((date) => {
+              const events = data.schedule[date] || [];
+              const isToday = date === new Date().toISOString().split('T')[0];
+              return (
+                <div
+                  key={date}
+                  className={`flex-1 border-r last:border-r-0 relative ${
+                    isToday ? 'bg-blue-50/30' : ''
+                  }`}
+                >
+                  {/* Hour lines */}
+                  {timeSlots.map((_, i) => (
+                    <div
+                      key={i}
+                      className="border-b border-gray-100"
+                      style={{ height: fixedMode ? `${60 * pixelsPerMinute}px` : '60px' }}
+                    />
+                  ))}
+
+                  {/* Events */}
+                  {events.map(renderEvent)}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Event Detail Modal */}
+      {selectedEvent && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setSelectedEvent(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="p-4 text-white"
+              style={{ backgroundColor: selectedEvent.program_color }}
+            >
+              <h3 className="text-lg font-semibold">{selectedEvent.program_name}</h3>
+            </div>
+            <div className="p-4 space-y-3">
+              {(selectedEvent.start_time || selectedEvent.end_time) && (
+                <div className="flex items-center gap-2 text-gray-700">
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>
+                    {formatTime(selectedEvent.start_time)} - {formatTime(selectedEvent.end_time)}
+                  </span>
+                </div>
+              )}
+              {selectedEvent.location && (
+                <div className="flex items-center gap-2 text-gray-700">
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>{selectedEvent.location}</span>
+                </div>
+              )}
+              {selectedEvent.teacher_name && (
+                <div className="flex items-center gap-2 text-gray-700">
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span>{selectedEvent.teacher_name}</span>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t flex justify-end">
+              <button
+                onClick={() => setSelectedEvent(null)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default WeekScheduleView;

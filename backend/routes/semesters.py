@@ -44,8 +44,15 @@ def create_semester():
         except ValueError:
             return jsonify({'error': '结束日期格式错误'}), 400
 
+    # Validate semester_type
+    semester_type = data.get('semester_type', 'fall')
+    valid_types = ['summer_training', 'fall', 'winter_training', 'spring']
+    if semester_type not in valid_types:
+        return jsonify({'error': '无效的学期类型'}), 400
+
     semester = Semester(
         name=data['name'],
+        semester_type=semester_type,
         start_date=start_date,
         end_date=end_date,
         is_current=data.get('is_current', False)
@@ -79,6 +86,12 @@ def update_semester(semester_id):
 
     if 'name' in data:
         semester.name = data['name']
+
+    if 'semester_type' in data:
+        valid_types = ['summer_training', 'fall', 'winter_training', 'spring']
+        if data['semester_type'] not in valid_types:
+            return jsonify({'error': '无效的学期类型'}), 400
+        semester.semester_type = data['semester_type']
 
     if 'start_date' in data:
         if data['start_date']:

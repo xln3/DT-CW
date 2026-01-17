@@ -10,6 +10,7 @@ interface AuthContextType {
   login: (data: LoginForm) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
   hasRole: (...roles: string[]) => boolean;
   canManageProgram: (programId: number) => boolean;
@@ -80,6 +81,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user.role === 'program_manager';
   };
 
+  const refreshUser = async () => {
+    try {
+      const { user, permissions } = await authApi.getMe();
+      setUser(user);
+      setPermissions(permissions);
+    } catch (error) {
+      // Ignore refresh errors
+    }
+  };
+
   useEffect(() => {
     checkAuth();
   }, []);
@@ -94,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         checkAuth,
+        refreshUser,
         hasPermission,
         hasRole,
         canManageProgram,

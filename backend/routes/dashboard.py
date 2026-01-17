@@ -22,20 +22,22 @@ def get_stats():
     # Count active programs
     program_count = Program.query.filter_by(status='active').count()
 
-    # Count rehearsals this week
+    # Count rehearsals this week (exclude cancelled)
     today = datetime.now().date()
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
 
     week_rehearsal_count = Rehearsal.query.filter(
         Rehearsal.scheduled_date >= week_start,
-        Rehearsal.scheduled_date <= week_end
+        Rehearsal.scheduled_date <= week_end,
+        db.or_(Rehearsal.status != 'cancelled', Rehearsal.status.is_(None))
     ).count()
 
-    # Get upcoming rehearsals (next 7 days)
+    # Get upcoming rehearsals (next 7 days, exclude cancelled)
     upcoming_rehearsals = Rehearsal.query.filter(
         Rehearsal.scheduled_date >= today,
-        Rehearsal.scheduled_date <= today + timedelta(days=7)
+        Rehearsal.scheduled_date <= today + timedelta(days=7),
+        db.or_(Rehearsal.status != 'cancelled', Rehearsal.status.is_(None))
     ).order_by(Rehearsal.scheduled_date, Rehearsal.scheduled_start_time).limit(5).all()
 
     upcoming_list = []
@@ -55,12 +57,30 @@ def get_stats():
 
     recent_program_list = []
     for p in recent_programs:
+        # Get non-cancelled rehearsals count
+        total_rehearsals = p.rehearsals.filter(
+            db.or_(Rehearsal.status != 'cancelled', Rehearsal.status.is_(None))
+        ).count()
+
+        # Get completed rehearsals count
+        now = datetime.now()
+        completed_rehearsals = 0
+        for r in p.rehearsals.filter(
+            db.or_(Rehearsal.status != 'cancelled', Rehearsal.status.is_(None))
+        ):
+            if r.scheduled_date < now.date():
+                completed_rehearsals += 1
+            elif r.scheduled_date == now.date() and r.scheduled_end_time:
+                if r.scheduled_end_time <= now.time():
+                    completed_rehearsals += 1
+
         recent_program_list.append({
             'id': p.id,
             'name': p.name,
             'category': p.category,
             'member_count': p.members.filter_by(status='active').count(),
-            'rehearsal_count': p.rehearsals.count()
+            'rehearsal_count': total_rehearsals,
+            'completed_rehearsal_count': completed_rehearsals
         })
 
     return jsonify({

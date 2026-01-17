@@ -27,6 +27,10 @@ import type {
   Expense,
   BudgetForm,
   ExpenseForm,
+  Semester,
+  SemesterType,
+  WeekScheduleData,
+  ScheduleEvent,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -141,6 +145,20 @@ export const authApi = {
     });
     return response.data;
   },
+
+  updateProfile: async (data: {
+    display_name?: string;
+    email?: string;
+    phone?: string;
+    gender?: string;
+    department?: string;
+    grade?: string;
+    student_id?: string;
+    member_phone?: string;
+  }) => {
+    const response = await api.put('/auth/profile', data);
+    return response.data;
+  },
 };
 
 // Members API
@@ -253,6 +271,27 @@ export const programsApi = {
     });
     return response.data;
   },
+
+  importCsv: async (file: File, defaultPassword?: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (defaultPassword) {
+      formData.append('default_password', defaultPassword);
+    }
+    const response = await api.post<{
+      message: string;
+      stats: {
+        programs_created: number;
+        members_created: number;
+        users_created: number;
+        assignments_created: number;
+      };
+      programs: Program[];
+    }>('/admin/programs/import-csv', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
 };
 
 // Rehearsals API
@@ -274,7 +313,7 @@ export const rehearsalsApi = {
     return response.data.rehearsal;
   },
 
-  update: async (id: number, data: Partial<RehearsalForm & { videos?: string[] }>) => {
+  update: async (id: number, data: Partial<RehearsalForm & { videos?: string[]; status?: string }>) => {
     const response = await api.put<{ rehearsal: Rehearsal }>(`/admin/rehearsals/${id}`, data);
     return response.data.rehearsal;
   },
@@ -387,29 +426,24 @@ export const usersApi = {
 export const semestersApi = {
   list: async () => {
     const response = await api.get<{
-      semesters: {
-        id: number;
-        name: string;
-        start_date: string | null;
-        end_date: string | null;
-        is_current: boolean;
-      }[];
+      semesters: Semester[];
     }>('/admin/semesters');
     return response.data.semesters;
   },
 
   get: async (id: number) => {
-    const response = await api.get(`/admin/semesters/${id}`);
+    const response = await api.get<{ semester: Semester }>(`/admin/semesters/${id}`);
     return response.data.semester;
   },
 
   create: async (data: {
     name: string;
+    semester_type?: SemesterType;
     start_date?: string;
     end_date?: string;
     is_current?: boolean;
   }) => {
-    const response = await api.post('/admin/semesters', data);
+    const response = await api.post<{ semester: Semester }>('/admin/semesters', data);
     return response.data.semester;
   },
 
@@ -417,12 +451,13 @@ export const semestersApi = {
     id: number,
     data: {
       name?: string;
+      semester_type?: SemesterType;
       start_date?: string;
       end_date?: string;
       is_current?: boolean;
     }
   ) => {
-    const response = await api.put(`/admin/semesters/${id}`, data);
+    const response = await api.put<{ semester: Semester }>(`/admin/semesters/${id}`, data);
     return response.data.semester;
   },
 
@@ -431,12 +466,12 @@ export const semestersApi = {
   },
 
   setCurrent: async (id: number) => {
-    const response = await api.post(`/admin/semesters/${id}/set-current`);
+    const response = await api.post<{ semester: Semester }>(`/admin/semesters/${id}/set-current`);
     return response.data.semester;
   },
 
   getCurrent: async () => {
-    const response = await api.get('/admin/semesters/current');
+    const response = await api.get<{ semester: Semester | null }>('/admin/semesters/current');
     return response.data.semester;
   },
 };
@@ -702,6 +737,30 @@ export const publicVenuesApi = {
   getSchedule: async (params?: { venue_id?: number; start_date?: string; end_date?: string }) => {
     const response = await api.get('/public/venues/schedule', { params });
     return response.data;
+  },
+};
+
+// Public Schedule API (for week schedule view)
+export const publicScheduleApi = {
+  getWeekSchedule: async (params?: { start_date?: string; semester_id?: number }) => {
+    const response = await api.get<WeekScheduleData>('/public/schedule/week', { params });
+    return response.data;
+  },
+
+  getDaySchedule: async (date: string, semesterId?: number) => {
+    const response = await api.get<{
+      date: string;
+      semester: Semester;
+      events: ScheduleEvent[];
+    }>(`/public/schedule/day/${date}`, {
+      params: { semester_id: semesterId },
+    });
+    return response.data;
+  },
+
+  getCurrentSemester: async () => {
+    const response = await api.get<{ semester: Semester | null }>('/admin/semesters/current');
+    return response.data.semester;
   },
 };
 

@@ -19,6 +19,7 @@ def register_blueprints(app: Flask):
     from .teacher_applications import teacher_applications_bp
     from .teacher_payments import teacher_payments_bp
     from .budget import budget_bp
+    from .public_schedule import public_schedule_bp
 
     # Auth routes
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -50,6 +51,7 @@ def register_blueprints(app: Flask):
     app.register_blueprint(public_attendance_bp, url_prefix='/api/public/attendance')
     app.register_blueprint(public_calendar_bp, url_prefix='/api/public/calendar')
     app.register_blueprint(public_venues_bp, url_prefix='/api/public/venues')
+    app.register_blueprint(public_schedule_bp, url_prefix='/api/public/schedule')
 
     # Face recognition routes
     from face_recognition.api import face_bp

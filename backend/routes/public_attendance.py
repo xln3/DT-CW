@@ -1,8 +1,24 @@
 """Public attendance display routes (no authentication required)."""
+from datetime import datetime
 from flask import Blueprint, request, jsonify
 
 from database import db
 from models import Program, Member, Rehearsal, Attendance, Semester, ProgramMember
+
+
+def is_rehearsal_completed(rehearsal):
+    """Check if a rehearsal is completed (not cancelled and time has passed)."""
+    if rehearsal.status == 'cancelled':
+        return False
+    now = datetime.now()
+    today = now.date()
+    current_time = now.time()
+
+    if rehearsal.scheduled_date < today:
+        return True
+    elif rehearsal.scheduled_date == today and rehearsal.scheduled_end_time:
+        return rehearsal.scheduled_end_time <= current_time
+    return False
 
 public_attendance_bp = Blueprint('public_attendance', __name__)
 
@@ -34,9 +50,15 @@ def attendance_overview():
 
     program_list = []
     for program in programs:
-        rehearsals = program.rehearsals.all()
-        num_rehearsals = len(rehearsals)
-        total_rehearsals += num_rehearsals
+        all_rehearsals = program.rehearsals.all()
+        # Only count non-cancelled rehearsals
+        active_rehearsals = [r for r in all_rehearsals if r.status != 'cancelled']
+        # Only count completed rehearsals for attendance statistics
+        completed_rehearsals = [r for r in active_rehearsals if is_rehearsal_completed(r)]
+
+        num_total = len(active_rehearsals)
+        num_completed = len(completed_rehearsals)
+        total_rehearsals += num_completed  # Only count completed for overall stats
 
         # Get member count
         member_count = ProgramMember.query.filter_by(
@@ -48,22 +70,23 @@ def attendance_overview():
         for pm in ProgramMember.query.filter_by(program_id=program.id, status='active'):
             total_members.add(pm.member_id)
 
-        if num_rehearsals == 0:
+        if num_completed == 0:
             program_list.append({
                 'id': program.id,
                 'name': program.name,
                 'category': program.category or '',
                 'member_count': member_count,
-                'rehearsal_count': 0,
+                'rehearsal_count': num_total,
+                'completed_rehearsal_count': num_completed,
                 'attendance_rate': 100.0
             })
             continue
 
-        # Calculate attendance rate
+        # Calculate attendance rate (only from completed rehearsals)
         total_records = 0
         present_count = 0
 
-        for rehearsal in rehearsals:
+        for rehearsal in completed_rehearsals:
             for record in rehearsal.attendance_records:
                 total_records += 1
                 if record.status in [
@@ -82,7 +105,8 @@ def attendance_overview():
             'name': program.name,
             'category': program.category or '',
             'member_count': member_count,
-            'rehearsal_count': num_rehearsals,
+            'rehearsal_count': num_total,
+            'completed_rehearsal_count': num_completed,
             'attendance_rate': round(attendance_rate, 1)
         })
 
@@ -108,7 +132,11 @@ def program_attendance(program_id):
     """Get detailed attendance for a program."""
     program = Program.query.get_or_404(program_id)
 
-    rehearsals = program.rehearsals.order_by(Rehearsal.scheduled_date.desc()).all()
+    all_rehearsals = program.rehearsals.order_by(Rehearsal.scheduled_date.desc()).all()
+    # Only count non-cancelled rehearsals
+    active_rehearsals = [r for r in all_rehearsals if r.status != 'cancelled']
+    # Only count completed rehearsals for attendance statistics
+    completed_rehearsals = [r for r in active_rehearsals if is_rehearsal_completed(r)]
 
     # Get active members
     program_members = ProgramMember.query.filter_by(
@@ -117,7 +145,7 @@ def program_attendance(program_id):
     ).all()
     members = [pm.member for pm in program_members if pm.member]
 
-    # Build member stats
+    # Build member stats (only from completed rehearsals)
     member_list = []
     for member in members:
         stats = {
@@ -132,8 +160,8 @@ def program_attendance(program_id):
             'attendance_rate': 100.0
         }
 
-        # Calculate stats from attendance records
-        for rehearsal in rehearsals:
+        # Calculate stats from attendance records (only completed rehearsals)
+        for rehearsal in completed_rehearsals:
             record = Attendance.query.filter_by(
                 rehearsal_id=rehearsal.id,
                 member_id=member.id
@@ -161,9 +189,9 @@ def program_attendance(program_id):
 
         member_list.append(stats)
 
-    # Build rehearsal list
+    # Build rehearsal list (only completed ones, show status)
     rehearsal_list = []
-    for rehearsal in rehearsals[:20]:  # Last 20 rehearsals
+    for rehearsal in completed_rehearsals[:20]:  # Last 20 completed rehearsals
         records = rehearsal.attendance_records.all()
         total = len(records)
         present = sum(1 for r in records if r.status in [
@@ -177,11 +205,13 @@ def program_attendance(program_id):
             'id': rehearsal.id,
             'date': rehearsal.scheduled_date.isoformat(),
             'location': rehearsal.location or '',
+            'status': rehearsal.status or 'scheduled',
             'attendance_rate': round(present / total * 100, 1) if total > 0 else 100.0
         })
 
     # Calculate overall stats
-    total_rehearsals = len(rehearsals)
+    num_total = len(active_rehearsals)
+    num_completed = len(completed_rehearsals)
     total_members = len(members)
     avg_rate = sum(m['attendance_rate'] for m in member_list) / len(member_list) if member_list else 100.0
 
@@ -192,7 +222,8 @@ def program_attendance(program_id):
             'category': program.category or ''
         },
         'stats': {
-            'total_rehearsals': total_rehearsals,
+            'total_rehearsals': num_total,
+            'completed_rehearsals': num_completed,
             'total_members': total_members,
             'average_attendance_rate': round(avg_rate, 1)
         },
@@ -244,11 +275,15 @@ def member_attendance():
             if semester_id and program.semester_id != semester_id:
                 continue
 
-            # Get attendance records
-            records = Attendance.query.join(Rehearsal).filter(
+            # Get attendance records (only from completed rehearsals)
+            all_records = Attendance.query.join(Rehearsal).filter(
                 Attendance.member_id == member.id,
-                Rehearsal.program_id == program.id
+                Rehearsal.program_id == program.id,
+                Rehearsal.status != 'cancelled'
             ).all()
+
+            # Filter to only completed rehearsals
+            records = [r for r in all_records if is_rehearsal_completed(r.rehearsal)]
 
             total = len(records)
             normal = sum(1 for r in records if r.status == Attendance.STATUS_NORMAL)

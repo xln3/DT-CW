@@ -101,8 +101,13 @@ def get_current_user():
     """Get current user info."""
     user = g.current_user
 
+    user_data = user.to_dict(include_email=True)
+    # Include linked member info if exists
+    if user.member:
+        user_data['member'] = user.member.to_dict()
+
     return jsonify({
-        'user': user.to_dict(include_email=True),
+        'user': user_data,
         'permissions': get_user_permissions(user)
     })
 
@@ -143,3 +148,61 @@ def change_password():
     )
 
     return jsonify({'message': '密码修改成功'})
+
+
+@auth_bp.route('/profile', methods=['PUT'])
+@login_required
+def update_profile():
+    """Update current user's profile."""
+    user = g.current_user
+    data = request.get_json()
+
+    if not data:
+        return jsonify({'error': '请提供更新信息'}), 400
+
+    # Update user fields
+    if 'display_name' in data:
+        display_name = data['display_name'].strip()
+        if display_name:
+            user.display_name = display_name
+
+    if 'email' in data:
+        user.email = data['email'].strip() or None
+
+    if 'phone' in data:
+        user.phone = data['phone'].strip() or None
+
+    # Update linked member fields if user has a linked member
+    if user.member:
+        member = user.member
+        if 'gender' in data:
+            member.gender = data['gender'].strip() or None
+        if 'department' in data:
+            member.department = data['department'].strip() or None
+        if 'grade' in data:
+            member.grade = data['grade'].strip() or None
+        if 'student_id' in data:
+            member.student_id = data['student_id'].strip() or None
+        if 'member_phone' in data:
+            member.phone = data['member_phone'].strip() or None
+
+    db.session.commit()
+
+    # Log profile update
+    AuditLog.log(
+        action=AuditLog.ACTION_UPDATE,
+        user=user,
+        module='auth',
+        resource_type='profile',
+        resource_id=user.id,
+        ip_address=request.remote_addr
+    )
+
+    user_data = user.to_dict(include_email=True)
+    if user.member:
+        user_data['member'] = user.member.to_dict()
+
+    return jsonify({
+        'message': '个人资料更新成功',
+        'user': user_data
+    })

@@ -1,0 +1,432 @@
+import { useState, useEffect } from 'react';
+import { ArrowLeft, Save, AlertCircle, CheckCircle, User, Lock, Edit2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../contexts/AuthContext';
+import { authApi } from '../../../services/api';
+import type { Member } from '../../../types';
+
+interface UserWithMember {
+  id: number;
+  username: string;
+  display_name: string;
+  email?: string;
+  phone?: string;
+  role: string;
+  status: string;
+  member?: Member;
+}
+
+export default function Profile() {
+  const navigate = useNavigate();
+  const { user, refreshUser } = useAuth();
+
+  // Profile form state
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    display_name: '',
+    email: '',
+    phone: '',
+    gender: '',
+    department: '',
+    grade: '',
+    student_id: '',
+    member_phone: '',
+  });
+
+  // Password form state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Load user data into form
+  useEffect(() => {
+    if (user) {
+      const u = user as UserWithMember;
+      setProfileForm({
+        display_name: u.display_name || '',
+        email: u.email || '',
+        phone: u.phone || '',
+        gender: u.member?.gender || '',
+        department: u.member?.department || '',
+        grade: u.member?.grade || '',
+        student_id: u.member?.student_id || '',
+        member_phone: u.member?.phone || '',
+      });
+    }
+  }, [user]);
+
+  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setProfileForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveProfile = async () => {
+    setError('');
+    setSuccess('');
+    setIsSaving(true);
+
+    try {
+      await authApi.updateProfile(profileForm);
+      setSuccess('个人资料保存成功');
+      setIsEditing(false);
+      // Refresh user data in context
+      if (refreshUser) {
+        await refreshUser();
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || '保存失败');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (!currentPassword || !newPassword) {
+      setError('请填写当前密码和新密码');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setError('新密码长度至少6位');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('两次输入的新密码不一致');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await authApi.changePassword(currentPassword, newPassword);
+      setSuccess('密码修改成功');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setError(err.response?.data?.error || '密码修改失败');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const getRoleLabel = (role?: string) => {
+    switch (role) {
+      case 'admin':
+        return '系统管理员';
+      case 'committee':
+        return '队委';
+      case 'program_manager':
+        return '节目负责人';
+      case 'member':
+        return '队员';
+      default:
+        return role || '-';
+    }
+  };
+
+  const u = user as UserWithMember | null;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center space-x-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2 text-gray-400 hover:text-gray-600"
+        >
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">个人设置</h1>
+          <p className="mt-1 text-sm text-gray-500">查看和修改个人信息</p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
+          <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />
+          <span className="text-sm text-red-700">{error}</span>
+        </div>
+      )}
+
+      {success && (
+        <div className="bg-green-50 border border-green-200 rounded-md p-4 flex items-start">
+          <CheckCircle className="h-5 w-5 text-green-500 mr-3 flex-shrink-0" />
+          <span className="text-sm text-green-700">{success}</span>
+        </div>
+      )}
+
+      {/* Profile Info */}
+      <div className="card">
+        <div className="card-header flex items-center justify-between">
+          <div className="flex items-center">
+            <User className="w-5 h-5 mr-2 text-gray-400" />
+            <h2 className="text-lg font-medium text-gray-900">个人信息</h2>
+          </div>
+          {!isEditing && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="btn-secondary text-sm"
+            >
+              <Edit2 className="w-4 h-4 mr-1" />
+              编辑
+            </button>
+          )}
+        </div>
+        <div className="card-body">
+          {isEditing ? (
+            <div className="space-y-4 max-w-2xl">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="form-label">用户名</label>
+                  <input
+                    type="text"
+                    className="form-input bg-gray-100"
+                    value={u?.username || ''}
+                    disabled
+                  />
+                  <p className="text-xs text-gray-500 mt-1">用户名不可修改</p>
+                </div>
+                <div>
+                  <label className="form-label">显示名称</label>
+                  <input
+                    type="text"
+                    name="display_name"
+                    className="form-input"
+                    value={profileForm.display_name}
+                    onChange={handleProfileChange}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">邮箱</label>
+                  <input
+                    type="email"
+                    name="email"
+                    className="form-input"
+                    value={profileForm.email}
+                    onChange={handleProfileChange}
+                    placeholder="example@email.com"
+                  />
+                </div>
+                <div>
+                  <label className="form-label">手机号</label>
+                  <input
+                    type="text"
+                    name="phone"
+                    className="form-input"
+                    value={profileForm.phone}
+                    onChange={handleProfileChange}
+                    placeholder="13800138000"
+                  />
+                </div>
+              </div>
+
+              {u?.member && (
+                <>
+                  <hr className="my-4" />
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">队员信息</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="form-label">性别</label>
+                      <select
+                        name="gender"
+                        className="form-input"
+                        value={profileForm.gender}
+                        onChange={handleProfileChange}
+                      >
+                        <option value="">请选择</option>
+                        <option value="男">男</option>
+                        <option value="女">女</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">学号</label>
+                      <input
+                        type="text"
+                        name="student_id"
+                        className="form-input"
+                        value={profileForm.student_id}
+                        onChange={handleProfileChange}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">院系</label>
+                      <input
+                        type="text"
+                        name="department"
+                        className="form-input"
+                        value={profileForm.department}
+                        onChange={handleProfileChange}
+                        placeholder="如：计算机科学与技术学院"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">年级</label>
+                      <input
+                        type="text"
+                        name="grade"
+                        className="form-input"
+                        value={profileForm.grade}
+                        onChange={handleProfileChange}
+                        placeholder="如：2023级"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="flex items-center space-x-3 pt-4">
+                <button
+                  onClick={handleSaveProfile}
+                  className="btn-primary"
+                  disabled={isSaving}
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {isSaving ? '保存中...' : '保存'}
+                </button>
+                <button
+                  onClick={() => setIsEditing(false)}
+                  className="btn-secondary"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : (
+            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <dt className="text-sm font-medium text-gray-500">用户名</dt>
+                <dd className="mt-1 text-sm text-gray-900">{u?.username}</dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">显示名称</dt>
+                <dd className="mt-1 text-sm text-gray-900">{u?.display_name}</dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">角色</dt>
+                <dd className="mt-1">
+                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-primary-100 text-primary-800">
+                    {getRoleLabel(u?.role)}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">邮箱</dt>
+                <dd className="mt-1 text-sm text-gray-900">{u?.email || '-'}</dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">手机号</dt>
+                <dd className="mt-1 text-sm text-gray-900">{u?.phone || '-'}</dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">状态</dt>
+                <dd className="mt-1">
+                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                    {u?.status === 'active' ? '正常' : '已禁用'}
+                  </span>
+                </dd>
+              </div>
+
+              {u?.member && (
+                <>
+                  <div className="col-span-full">
+                    <hr className="my-2" />
+                    <h3 className="text-sm font-medium text-gray-700 mt-2">队员信息</h3>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">性别</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.gender || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">学号</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.student_id || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">院系</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.department || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">年级</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.grade || '-'}</dd>
+                  </div>
+                </>
+              )}
+            </dl>
+          )}
+        </div>
+      </div>
+
+      {/* Change Password */}
+      <div className="card">
+        <div className="card-header">
+          <div className="flex items-center">
+            <Lock className="w-5 h-5 mr-2 text-gray-400" />
+            <h2 className="text-lg font-medium text-gray-900">修改密码</h2>
+          </div>
+        </div>
+        <div className="card-body">
+          <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+            <div>
+              <label htmlFor="currentPassword" className="form-label">
+                当前密码
+              </label>
+              <input
+                type="password"
+                id="currentPassword"
+                className="form-input"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="输入当前密码"
+              />
+            </div>
+            <div>
+              <label htmlFor="newPassword" className="form-label">
+                新密码
+              </label>
+              <input
+                type="password"
+                id="newPassword"
+                className="form-input"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="输入新密码（至少6位）"
+              />
+            </div>
+            <div>
+              <label htmlFor="confirmPassword" className="form-label">
+                确认新密码
+              </label>
+              <input
+                type="password"
+                id="confirmPassword"
+                className="form-input"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="再次输入新密码"
+              />
+            </div>
+            <div className="pt-2">
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={isChangingPassword}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {isChangingPassword ? '保存中...' : '修改密码'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}

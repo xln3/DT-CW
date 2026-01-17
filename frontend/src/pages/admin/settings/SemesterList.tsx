@@ -10,14 +10,8 @@ import {
 } from 'lucide-react';
 import { semestersApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
-
-interface Semester {
-  id: number;
-  name: string;
-  start_date: string | null;
-  end_date: string | null;
-  is_current: boolean;
-}
+import type { Semester, SemesterType } from '../../../types';
+import { SEMESTER_TYPES } from '../../../types';
 
 export default function SemesterList() {
   const { hasRole } = useAuth();
@@ -30,6 +24,7 @@ export default function SemesterList() {
   const [editingSemester, setEditingSemester] = useState<Semester | null>(null);
   const [form, setForm] = useState({
     name: '',
+    semester_type: 'fall' as SemesterType,
     start_date: '',
     end_date: '',
     is_current: false,
@@ -57,6 +52,7 @@ export default function SemesterList() {
       setEditingSemester(semester);
       setForm({
         name: semester.name,
+        semester_type: semester.semester_type || 'fall',
         start_date: semester.start_date || '',
         end_date: semester.end_date || '',
         is_current: semester.is_current,
@@ -65,12 +61,17 @@ export default function SemesterList() {
       setEditingSemester(null);
       setForm({
         name: '',
+        semester_type: 'fall',
         start_date: '',
         end_date: '',
         is_current: false,
       });
     }
     setShowForm(true);
+  };
+
+  const getSemesterTypeLabel = (type: string) => {
+    return SEMESTER_TYPES.find(t => t.value === type)?.label || type;
   };
 
   const handleCloseForm = () => {
@@ -93,6 +94,7 @@ export default function SemesterList() {
       if (editingSemester) {
         await semestersApi.update(editingSemester.id, {
           name: form.name,
+          semester_type: form.semester_type,
           start_date: form.start_date || undefined,
           end_date: form.end_date || undefined,
           is_current: form.is_current,
@@ -100,6 +102,7 @@ export default function SemesterList() {
       } else {
         await semestersApi.create({
           name: form.name,
+          semester_type: form.semester_type,
           start_date: form.start_date || undefined,
           end_date: form.end_date || undefined,
           is_current: form.is_current,
@@ -192,6 +195,9 @@ export default function SemesterList() {
                           <span className="font-medium text-gray-900">
                             {semester.name}
                           </span>
+                          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                            {getSemesterTypeLabel(semester.semester_type)}
+                          </span>
                           {semester.is_current && (
                             <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-primary-100 text-primary-700">
                               当前学期
@@ -270,6 +276,27 @@ export default function SemesterList() {
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                     placeholder="例如: 2024年秋季学期"
                   />
+                </div>
+
+                <div>
+                  <label htmlFor="semester_type" className="form-label">
+                    学期类型 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="semester_type"
+                    className="form-input"
+                    value={form.semester_type}
+                    onChange={(e) => setForm({ ...form, semester_type: e.target.value as SemesterType })}
+                  >
+                    {SEMESTER_TYPES.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    寒训/暑训使用周视图，秋季/春季使用月历视图
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

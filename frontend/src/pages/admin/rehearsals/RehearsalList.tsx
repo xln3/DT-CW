@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Calendar, Clock, MapPin, Users, Edit2, Trash2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Calendar, Clock, MapPin, Users, Edit2, Trash2, AlertCircle, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
 import { rehearsalsApi, programsApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { Rehearsal, Program } from '../../../types';
@@ -12,6 +12,7 @@ export default function RehearsalList() {
   const [error, setError] = useState('');
   const [programFilter, setProgramFilter] = useState<number | ''>('');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [cancelConfirm, setCancelConfirm] = useState<number | null>(null);
 
   // Date range filter (current week by default)
   const [dateFrom, setDateFrom] = useState(() => {
@@ -70,6 +71,27 @@ export default function RehearsalList() {
       setDeleteConfirm(null);
     } catch (err: any) {
       setError(err.response?.data?.error || '删除失败');
+    }
+  };
+
+  const handleCancel = async (id: number) => {
+    try {
+      const updated = await rehearsalsApi.update(id, { status: 'cancelled' });
+      setRehearsals(rehearsals.map((r) => (r.id === id ? updated : r)));
+      setCancelConfirm(null);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '取消失败');
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'cancelled':
+        return <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-800">已取消</span>;
+      case 'completed':
+        return <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">已完成</span>;
+      default:
+        return <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">已安排</span>;
     }
   };
 
@@ -206,14 +228,15 @@ export default function RehearsalList() {
               </h3>
               <div className="space-y-3">
                 {groupedRehearsals[date].map((rehearsal) => (
-                  <div key={rehearsal.id} className="card hover:shadow-md transition-shadow">
+                  <div key={rehearsal.id} className={`card hover:shadow-md transition-shadow ${rehearsal.status === 'cancelled' ? 'opacity-60' : ''}`}>
                     <div className="card-body">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-3 flex-wrap gap-2">
                             <h4 className="text-lg font-medium text-gray-900">
                               {rehearsal.program_name}
                             </h4>
+                            {getStatusBadge(rehearsal.status)}
                             {rehearsal.teacher_name && (
                               <span className="text-sm text-gray-500">
                                 教师: {rehearsal.teacher_name}
@@ -248,31 +271,61 @@ export default function RehearsalList() {
                             >
                               查看详情
                             </Link>
-                            <Link
-                              to={`/admin/rehearsals/${rehearsal.id}/edit`}
-                              className="p-2 text-gray-400 hover:text-primary-600"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </Link>
+                            {rehearsal.status !== 'cancelled' && (
+                              <Link
+                                to={`/admin/rehearsals/${rehearsal.id}/edit`}
+                                className="p-2 text-gray-400 hover:text-primary-600"
+                                title="编辑"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </Link>
+                            )}
+                            {rehearsal.status !== 'cancelled' && (
+                              cancelConfirm === rehearsal.id ? (
+                                <div className="flex items-center space-x-1">
+                                  <button
+                                    onClick={() => handleCancel(rehearsal.id)}
+                                    className="px-2 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                                  >
+                                    确认取消
+                                  </button>
+                                  <button
+                                    onClick={() => setCancelConfirm(null)}
+                                    className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                                  >
+                                    返回
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setCancelConfirm(rehearsal.id)}
+                                  className="p-2 text-gray-400 hover:text-yellow-600"
+                                  title="取消排练"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                              )
+                            )}
                             {deleteConfirm === rehearsal.id ? (
                               <div className="flex items-center space-x-1">
                                 <button
                                   onClick={() => handleDelete(rehearsal.id)}
                                   className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
                                 >
-                                  确认
+                                  确认删除
                                 </button>
                                 <button
                                   onClick={() => setDeleteConfirm(null)}
                                   className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
                                 >
-                                  取消
+                                  返回
                                 </button>
                               </div>
                             ) : (
                               <button
                                 onClick={() => setDeleteConfirm(rehearsal.id)}
                                 className="p-2 text-gray-400 hover:text-red-600"
+                                title="删除"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
