@@ -33,6 +33,20 @@ export default function Profile() {
     grade: '',
     student_id: '',
     member_phone: '',
+    // Extended member fields
+    class_name: '',
+    member_email: '',
+    dormitory: '',
+    birth_date: '',
+    ethnicity: '',
+    hometown: '',
+    political_status: '',
+    party_branch: '',
+    is_talented: false,
+    is_concentrated_class: false,
+    team_role: '',
+    join_year: undefined as number | undefined,
+    team_level: '',
   });
 
   // Password form state
@@ -58,13 +72,34 @@ export default function Profile() {
         grade: u.member?.grade || '',
         student_id: u.member?.student_id || '',
         member_phone: u.member?.phone || '',
+        // Extended member fields
+        class_name: u.member?.class_name || '',
+        member_email: u.member?.email || '',
+        dormitory: u.member?.dormitory || '',
+        birth_date: u.member?.birth_date || '',
+        ethnicity: u.member?.ethnicity || '',
+        hometown: u.member?.hometown || '',
+        political_status: u.member?.political_status || '',
+        party_branch: u.member?.party_branch || '',
+        is_talented: u.member?.is_talented || false,
+        is_concentrated_class: u.member?.is_concentrated_class || false,
+        team_role: u.member?.team_role || '',
+        join_year: u.member?.join_year,
+        team_level: u.member?.team_level || '',
       });
     }
   }, [user]);
 
   const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setProfileForm(prev => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target;
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setProfileForm(prev => ({ ...prev, [name]: checked }));
+    } else if (name === 'join_year') {
+      setProfileForm(prev => ({ ...prev, [name]: value ? Number(value) : undefined }));
+    } else {
+      setProfileForm(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSaveProfile = async () => {
@@ -236,8 +271,8 @@ export default function Profile() {
               {u?.member && (
                 <>
                   <hr className="my-4" />
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">队员信息</h3>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">基本信息</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <div>
                       <label className="form-label">性别</label>
                       <select
@@ -269,7 +304,16 @@ export default function Profile() {
                         className="form-input"
                         value={profileForm.department}
                         onChange={handleProfileChange}
-                        placeholder="如：计算机科学与技术学院"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">班级</label>
+                      <input
+                        type="text"
+                        name="class_name"
+                        className="form-input"
+                        value={profileForm.class_name}
+                        onChange={handleProfileChange}
                       />
                     </div>
                     <div>
@@ -280,8 +324,166 @@ export default function Profile() {
                         className="form-input"
                         value={profileForm.grade}
                         onChange={handleProfileChange}
-                        placeholder="如：2023级"
+                        placeholder="如：大三"
                       />
+                    </div>
+                  </div>
+
+                  <h3 className="text-sm font-medium text-gray-700 mb-3 mt-4">联系方式</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                      <label className="form-label">手机号</label>
+                      <input
+                        type="text"
+                        name="member_phone"
+                        className="form-input"
+                        value={profileForm.member_phone}
+                        onChange={handleProfileChange}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">邮箱</label>
+                      <input
+                        type="email"
+                        name="member_email"
+                        className="form-input"
+                        value={profileForm.member_email}
+                        onChange={handleProfileChange}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">宿舍</label>
+                      <input
+                        type="text"
+                        name="dormitory"
+                        className="form-input"
+                        value={profileForm.dormitory}
+                        onChange={handleProfileChange}
+                        placeholder="如：北区3号楼101"
+                      />
+                    </div>
+                  </div>
+
+                  <h3 className="text-sm font-medium text-gray-700 mb-3 mt-4">个人信息</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                      <label className="form-label">出生日期</label>
+                      <input
+                        type="date"
+                        name="birth_date"
+                        className="form-input"
+                        value={profileForm.birth_date}
+                        onChange={handleProfileChange}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">民族</label>
+                      <input
+                        type="text"
+                        name="ethnicity"
+                        className="form-input"
+                        value={profileForm.ethnicity}
+                        onChange={handleProfileChange}
+                        placeholder="如：汉族"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">籍贯</label>
+                      <input
+                        type="text"
+                        name="hometown"
+                        className="form-input"
+                        value={profileForm.hometown}
+                        onChange={handleProfileChange}
+                        placeholder="如：北京市"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">政治面貌</label>
+                      <select
+                        name="political_status"
+                        className="form-input"
+                        value={profileForm.political_status}
+                        onChange={handleProfileChange}
+                      >
+                        <option value="">请选择</option>
+                        <option value="群众">群众</option>
+                        <option value="共青团员">共青团员</option>
+                        <option value="预备党员">预备党员</option>
+                        <option value="中共党员">中共党员</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">党团关系所在</label>
+                      <input
+                        type="text"
+                        name="party_branch"
+                        className="form-input"
+                        value={profileForm.party_branch}
+                        onChange={handleProfileChange}
+                      />
+                    </div>
+                  </div>
+
+                  <h3 className="text-sm font-medium text-gray-700 mb-3 mt-4">艺术团信息</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                      <label className="form-label">入队年份</label>
+                      <input
+                        type="number"
+                        name="join_year"
+                        className="form-input"
+                        value={profileForm.join_year || ''}
+                        onChange={handleProfileChange}
+                        placeholder="如：2023"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">所在梯队</label>
+                      <select
+                        name="team_level"
+                        className="form-input"
+                        value={profileForm.team_level}
+                        onChange={handleProfileChange}
+                      >
+                        <option value="">请选择</option>
+                        <option value="一梯队">一梯队</option>
+                        <option value="二梯队">二梯队</option>
+                        <option value="三梯队">三梯队</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">队内职务</label>
+                      <input
+                        type="text"
+                        name="team_role"
+                        className="form-input"
+                        value={profileForm.team_role}
+                        onChange={handleProfileChange}
+                        placeholder="如：队长"
+                      />
+                    </div>
+                    <div className="sm:col-span-2 lg:col-span-3 flex items-center space-x-6">
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          name="is_talented"
+                          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          checked={profileForm.is_talented}
+                          onChange={handleProfileChange}
+                        />
+                        <span className="text-sm text-gray-700">特长生</span>
+                      </label>
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          name="is_concentrated_class"
+                          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          checked={profileForm.is_concentrated_class}
+                          onChange={handleProfileChange}
+                        />
+                        <span className="text-sm text-gray-700">集中班</span>
+                      </label>
                     </div>
                   </div>
                 </>
@@ -343,7 +545,7 @@ export default function Profile() {
                 <>
                   <div className="col-span-full">
                     <hr className="my-2" />
-                    <h3 className="text-sm font-medium text-gray-700 mt-2">队员信息</h3>
+                    <h3 className="text-sm font-medium text-gray-700 mt-2">基本信息</h3>
                   </div>
                   <div>
                     <dt className="text-sm font-medium text-gray-500">性别</dt>
@@ -358,8 +560,79 @@ export default function Profile() {
                     <dd className="mt-1 text-sm text-gray-900">{u.member.department || '-'}</dd>
                   </div>
                   <div>
+                    <dt className="text-sm font-medium text-gray-500">班级</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.class_name || '-'}</dd>
+                  </div>
+                  <div>
                     <dt className="text-sm font-medium text-gray-500">年级</dt>
                     <dd className="mt-1 text-sm text-gray-900">{u.member.grade || '-'}</dd>
+                  </div>
+
+                  <div className="col-span-full">
+                    <hr className="my-2" />
+                    <h3 className="text-sm font-medium text-gray-700 mt-2">联系方式</h3>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">手机号</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.phone || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">邮箱</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.email || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">宿舍</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.dormitory || '-'}</dd>
+                  </div>
+
+                  <div className="col-span-full">
+                    <hr className="my-2" />
+                    <h3 className="text-sm font-medium text-gray-700 mt-2">个人信息</h3>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">出生日期</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.birth_date || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">民族</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.ethnicity || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">籍贯</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.hometown || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">政治面貌</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.political_status || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">党团关系所在</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.party_branch || '-'}</dd>
+                  </div>
+
+                  <div className="col-span-full">
+                    <hr className="my-2" />
+                    <h3 className="text-sm font-medium text-gray-700 mt-2">艺术团信息</h3>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">入队年份</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.join_year || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">所在梯队</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.team_level || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">队内职务</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.team_role || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">特长生</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.is_talented ? '是' : '否'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">集中班</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.is_concentrated_class ? '是' : '否'}</dd>
                   </div>
                 </>
               )}

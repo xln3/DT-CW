@@ -217,6 +217,25 @@ export const membersApi = {
     );
     return response.data;
   },
+
+  importCsv: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post<{
+      message: string;
+      created_count: number;
+      updated_count: number;
+      skipped_count: number;
+      errors: string[];
+    }>('/admin/members/import-csv', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  downloadTemplate: () => {
+    return `${api.defaults.baseURL}/admin/members/import-template`;
+  },
 };
 
 // Teachers API

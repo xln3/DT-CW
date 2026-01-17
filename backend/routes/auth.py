@@ -197,6 +197,42 @@ def update_profile():
             member.student_id = data['student_id'].strip() or None
         if 'member_phone' in data:
             member.phone = data['member_phone'].strip() or None
+        # Extended member fields (editable by member)
+        if 'class_name' in data:
+            member.class_name = data['class_name'].strip() or None
+        if 'member_email' in data:
+            member.email = data['member_email'].strip() or None
+        if 'dormitory' in data:
+            member.dormitory = data['dormitory'].strip() or None
+        if 'birth_date' in data:
+            from datetime import datetime
+            birth_date = data['birth_date']
+            if birth_date and isinstance(birth_date, str):
+                try:
+                    member.birth_date = datetime.strptime(birth_date.strip(), '%Y-%m-%d').date()
+                except ValueError:
+                    member.birth_date = None
+            else:
+                member.birth_date = None
+        if 'ethnicity' in data:
+            member.ethnicity = data['ethnicity'].strip() or None
+        if 'hometown' in data:
+            member.hometown = data['hometown'].strip() or None
+        if 'political_status' in data:
+            member.political_status = data['political_status'].strip() or None
+        if 'party_branch' in data:
+            member.party_branch = data['party_branch'].strip() or None
+        if 'is_talented' in data:
+            member.is_talented = bool(data['is_talented'])
+        if 'is_concentrated_class' in data:
+            member.is_concentrated_class = bool(data['is_concentrated_class'])
+        if 'team_role' in data:
+            member.team_role = data['team_role'].strip() or None
+        if 'join_year' in data:
+            member.join_year = data['join_year']
+        if 'team_level' in data:
+            member.team_level = data['team_level'].strip() or None
+        # Note: graduating_this_semester is NOT editable by member (admin only)
 
     db.session.commit()
 

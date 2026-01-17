@@ -34,6 +34,21 @@ export interface Member {
   created_at: string;
   updated_at: string;
   programs?: Program[];
+  // Extended fields
+  class_name?: string;
+  email?: string;
+  dormitory?: string;
+  birth_date?: string;
+  ethnicity?: string;
+  hometown?: string;
+  political_status?: string;
+  party_branch?: string;
+  is_talented?: boolean;
+  is_concentrated_class?: boolean;
+  team_role?: string;
+  join_year?: number;
+  team_level?: string;
+  graduating_this_semester?: boolean;
 }
 
 // Teacher types
@@ -193,6 +208,21 @@ export interface MemberForm {
   grade?: string;
   notes?: string;
   status?: 'active' | 'inactive';
+  // Extended fields
+  class_name?: string;
+  email?: string;
+  dormitory?: string;
+  birth_date?: string;
+  ethnicity?: string;
+  hometown?: string;
+  political_status?: string;
+  party_branch?: string;
+  is_talented?: boolean;
+  is_concentrated_class?: boolean;
+  team_role?: string;
+  join_year?: number;
+  team_level?: string;
+  graduating_this_semester?: boolean;
 }
 
 export interface TeacherForm {

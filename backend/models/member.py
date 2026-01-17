@@ -1,5 +1,5 @@
 """Member model."""
-from datetime import datetime
+from datetime import datetime, date
 from database import db
 
 
@@ -18,6 +18,22 @@ class Member(db.Model):
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Extended fields (Phase 1)
+    class_name = db.Column(db.String(50))  # 班级
+    email = db.Column(db.String(100))  # 邮箱
+    dormitory = db.Column(db.String(100))  # 宿舍
+    birth_date = db.Column(db.Date)  # 出生日期
+    ethnicity = db.Column(db.String(50))  # 民族
+    hometown = db.Column(db.String(100))  # 籍贯
+    political_status = db.Column(db.String(50))  # 政治面貌
+    party_branch = db.Column(db.String(100))  # 党团关系所在
+    is_talented = db.Column(db.Boolean, default=False)  # 是否为特长生
+    is_concentrated_class = db.Column(db.Boolean, default=False)  # 是否为集中班
+    team_role = db.Column(db.String(50))  # 队内职务
+    join_year = db.Column(db.Integer)  # 入队年份
+    team_level = db.Column(db.String(50))  # 所在梯队
+    graduating_this_semester = db.Column(db.Boolean, default=False)  # 本学期毕业
 
     # Relationships
     program_memberships = db.relationship('ProgramMember', back_populates='member', lazy='dynamic')
@@ -41,6 +57,21 @@ class Member(db.Model):
             'notes': self.notes,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            # Extended fields
+            'class_name': self.class_name,
+            'email': self.email,
+            'dormitory': self.dormitory,
+            'birth_date': self.birth_date.isoformat() if self.birth_date else None,
+            'ethnicity': self.ethnicity,
+            'hometown': self.hometown,
+            'political_status': self.political_status,
+            'party_branch': self.party_branch,
+            'is_talented': self.is_talented,
+            'is_concentrated_class': self.is_concentrated_class,
+            'team_role': self.team_role,
+            'join_year': self.join_year,
+            'team_level': self.team_level,
+            'graduating_this_semester': self.graduating_this_semester,
         }
         if include_programs:
             data['programs'] = [

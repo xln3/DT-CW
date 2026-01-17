@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, AlertCircle, Upload, Download, X } from 'lucide-react';
 import { membersApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { Member } from '../../../types';
@@ -12,6 +12,16 @@ export default function MemberList() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+
+  // Import state
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    success: boolean;
+    created?: number;
+    updated?: number;
+    errors?: string[];
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { hasRole } = useAuth();
   const canEdit = hasRole('admin', 'committee');
@@ -51,6 +61,42 @@ export default function MemberList() {
     }
   };
 
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportResult(null);
+    setError('');
+
+    try {
+      const result = await membersApi.importCsv(file);
+      setImportResult({
+        success: true,
+        created: result.created_count,
+        updated: result.updated_count,
+        errors: result.errors,
+      });
+      // Refresh the list
+      fetchMembers();
+    } catch (err: any) {
+      setImportResult({
+        success: false,
+        errors: [err.response?.data?.error || '导入失败'],
+      });
+    } finally {
+      setIsImporting(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    window.open(membersApi.downloadTemplate(), '_blank');
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -59,10 +105,35 @@ export default function MemberList() {
           <p className="mt-1 text-sm text-gray-500">管理艺术团所有队员信息</p>
         </div>
         {canEdit && (
-          <Link to="/admin/members/new" className="btn-primary">
-            <Plus className="w-4 h-4 mr-2" />
-            添加队员
-          </Link>
+          <div className="flex items-center space-x-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImport}
+              accept=".csv"
+              className="hidden"
+            />
+            <button
+              onClick={handleDownloadTemplate}
+              className="btn-secondary"
+              title="下载导入模板"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              模板
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="btn-secondary"
+              disabled={isImporting}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {isImporting ? '导入中...' : '导入'}
+            </button>
+            <Link to="/admin/members/new" className="btn-primary">
+              <Plus className="w-4 h-4 mr-2" />
+              添加队员
+            </Link>
+          </div>
         )}
       </div>
 
@@ -97,6 +168,39 @@ export default function MemberList() {
           </form>
         </div>
       </div>
+
+      {/* Import result */}
+      {importResult && (
+        <div className={`border rounded-md p-4 ${importResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              {importResult.success ? (
+                <p className="text-sm text-green-700">
+                  导入完成：创建 {importResult.created} 名队员，更新 {importResult.updated} 名队员
+                  {importResult.errors && importResult.errors.length > 0 && (
+                    <span className="text-yellow-700">（部分行有错误）</span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-sm text-red-700">导入失败</p>
+              )}
+              {importResult.errors && importResult.errors.length > 0 && (
+                <ul className="mt-2 text-sm text-gray-600 list-disc list-inside">
+                  {importResult.errors.map((err, idx) => (
+                    <li key={idx}>{err}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <button
+              onClick={() => setImportResult(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Error message */}
       {error && (
