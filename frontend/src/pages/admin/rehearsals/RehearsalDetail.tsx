@@ -9,7 +9,6 @@ import {
   Calendar,
   AlertCircle,
   Check,
-  X,
   FileText,
   Upload,
   Camera,
@@ -24,7 +23,7 @@ import {
 import { rehearsalsApi, faceRecognitionApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { Rehearsal, Attendance, AttendanceStatus, FaceMatchStatus } from '../../../types';
-import { ATTENDANCE_STATUS_DISPLAY, MATCH_STATUS_DISPLAY } from '../../../types';
+import { MATCH_STATUS_DISPLAY } from '../../../types';
 
 type PhotoType = 'check_in' | 'check_out';
 
@@ -76,15 +75,16 @@ export default function RehearsalDetail() {
   const [error, setError] = useState('');
   const [editingAttendance, setEditingAttendance] = useState<number | null>(null);
   const [leaveForm, setLeaveForm] = useState({
-    has_leave: false,
-    leave_type: 'full' as 'full' | 'late' | 'early',
+    leave_before: false,  // 课前请假
+    leave_after: false,   // 课后请假
     leave_reason: '',
   });
 
   // 手动修改状态的编辑状态
   const [editingOverride, setEditingOverride] = useState<number | null>(null);
   const [overrideForm, setOverrideForm] = useState({
-    status: 'normal' as AttendanceStatus,
+    before_present: true,   // 课前到
+    after_present: true,    // 课后到
     override_reason: '',
   });
 
@@ -143,10 +143,21 @@ export default function RehearsalDetail() {
 
   const handleUpdateLeave = async (memberId: number) => {
     try {
+      // 将课前/课后请假转换为 has_leave + leave_type
+      const hasLeave = leaveForm.leave_before || leaveForm.leave_after;
+      let leaveType: 'full' | 'late' | 'early' | undefined;
+      if (leaveForm.leave_before && leaveForm.leave_after) {
+        leaveType = 'full';
+      } else if (leaveForm.leave_before) {
+        leaveType = 'late';  // 课前请假 = 迟到请假
+      } else if (leaveForm.leave_after) {
+        leaveType = 'early'; // 课后请假 = 早退请假
+      }
+
       const updated = await rehearsalsApi.updateAttendance(Number(id), memberId, {
-        has_leave: leaveForm.has_leave,
-        leave_type: leaveForm.has_leave ? leaveForm.leave_type : undefined,
-        leave_reason: leaveForm.has_leave ? leaveForm.leave_reason : undefined,
+        has_leave: hasLeave,
+        leave_type: hasLeave ? leaveType : undefined,
+        leave_reason: hasLeave ? leaveForm.leave_reason : undefined,
       });
       setAttendance(
         attendance.map((a) => (a.member_id === memberId ? updated : a))
@@ -160,9 +171,22 @@ export default function RehearsalDetail() {
   const startEditLeave = (att: Attendance) => {
     setEditingOverride(null);  // 关闭修改编辑
     setEditingAttendance(att.member_id);
+    // 将 has_leave + leave_type 转换为课前/课后请假
+    let leaveBefore = false;
+    let leaveAfter = false;
+    if (att.has_leave) {
+      if (att.leave_type === 'full') {
+        leaveBefore = true;
+        leaveAfter = true;
+      } else if (att.leave_type === 'late') {
+        leaveBefore = true;
+      } else if (att.leave_type === 'early') {
+        leaveAfter = true;
+      }
+    }
     setLeaveForm({
-      has_leave: att.has_leave,
-      leave_type: (att.leave_type as 'full' | 'late' | 'early') || 'full',
+      leave_before: leaveBefore,
+      leave_after: leaveAfter,
       leave_reason: att.leave_reason || '',
     });
   };
@@ -171,8 +195,17 @@ export default function RehearsalDetail() {
   const startEditOverride = (att: Attendance) => {
     setEditingAttendance(null);  // 关闭请假编辑
     setEditingOverride(att.member_id);
+    // 根据当前检测状态或手动覆盖状态初始化
+    let beforePresent = att.detected_before;
+    let afterPresent = att.detected_after;
+    if (att.manual_override) {
+      // 如果已手动覆盖，根据 status 推断
+      beforePresent = ['normal', 'early_leave'].includes(att.status);
+      afterPresent = ['normal', 'late'].includes(att.status);
+    }
     setOverrideForm({
-      status: att.manual_override ? att.status : 'normal',
+      before_present: beforePresent,
+      after_present: afterPresent,
       override_reason: att.override_reason || '',
     });
   };
@@ -183,10 +216,22 @@ export default function RehearsalDetail() {
       setError('请填写修改原因');
       return;
     }
+    // 将课前/课后到转换为 status
+    let status: AttendanceStatus;
+    if (overrideForm.before_present && overrideForm.after_present) {
+      status = 'normal';
+    } else if (!overrideForm.before_present && overrideForm.after_present) {
+      status = 'late';
+    } else if (overrideForm.before_present && !overrideForm.after_present) {
+      status = 'early_leave';
+    } else {
+      status = 'absent';
+    }
+
     try {
       const updated = await rehearsalsApi.updateAttendance(Number(id), memberId, {
         manual_override: true,
-        status: overrideForm.status,
+        status,
         override_reason: overrideForm.override_reason,
       });
       setAttendance(attendance.map((a) => (a.member_id === memberId ? updated : a)));
@@ -373,30 +418,46 @@ export default function RehearsalDetail() {
     return pendingAnnotations.find(p => p.face_id === faceId);
   };
 
-  const getStatusBadge = (status: AttendanceStatus) => {
-    const colors: Record<string, string> = {
-      normal: 'bg-green-100 text-green-800',
-      late: 'bg-yellow-100 text-yellow-800',
-      early_leave: 'bg-yellow-100 text-yellow-800',
-      absent: 'bg-red-100 text-red-800',
-      leave_absent: 'bg-blue-100 text-blue-800',
-      leave_late: 'bg-blue-100 text-blue-800',
-      leave_early: 'bg-blue-100 text-blue-800',
-    };
-    return (
-      <span
-        className={`px-2 py-1 text-xs font-medium rounded-full ${colors[status] || 'bg-gray-100 text-gray-800'}`}
-      >
-        {ATTENDANCE_STATUS_DISPLAY[status] || status}
-      </span>
+  // 获取单个方块的颜色类名和 tooltip
+  const getSquareStyle = (
+    detected: boolean,
+    hasLeave: boolean,
+    leaveType: string | null,
+    isBefore: boolean
+  ): { colorClass: string; tooltip: string } => {
+    if (detected) {
+      return { colorClass: 'bg-green-500', tooltip: isBefore ? '课前到' : '课后到' };
+    }
+    // 没检测到，看是否请假
+    const isLeaveApplicable = hasLeave && (
+      leaveType === 'full' ||
+      (isBefore && leaveType === 'late') ||
+      (!isBefore && leaveType === 'early')
     );
+    if (isLeaveApplicable) {
+      return { colorClass: 'bg-blue-500', tooltip: isBefore ? '课前请假' : '课后请假' };
+    }
+    return { colorClass: 'bg-orange-500', tooltip: isBefore ? '课前缺勤' : '课后缺勤' };
   };
 
-  const getDetectionIcon = (detected: boolean) => {
-    return detected ? (
-      <Check className="w-4 h-4 text-green-600" />
-    ) : (
-      <X className="w-4 h-4 text-red-600" />
+  // 渲染双正方形考勤状态
+  const renderAttendanceSquares = (att: Attendance) => {
+    // 如果手动修改了，根据 status 推断课前课后状态
+    let beforePresent = att.detected_before;
+    let afterPresent = att.detected_after;
+    if (att.manual_override) {
+      beforePresent = ['normal', 'early_leave'].includes(att.status);
+      afterPresent = ['normal', 'late'].includes(att.status);
+    }
+
+    const beforeStyle = getSquareStyle(beforePresent, att.has_leave, att.leave_type, true);
+    const afterStyle = getSquareStyle(afterPresent, att.has_leave, att.leave_type, false);
+
+    return (
+      <div className="inline-flex" title={`${beforeStyle.tooltip} | ${afterStyle.tooltip}`}>
+        <div className={`w-5 h-5 rounded-l-sm ${beforeStyle.colorClass}`} />
+        <div className={`w-5 h-5 rounded-r-sm ${afterStyle.colorClass}`} />
+      </div>
     );
   };
 
@@ -896,17 +957,11 @@ export default function RehearsalDetail() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       姓名
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      课前
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      课后
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      考勤
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      状态
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      请假
+                      备注
                     </th>
                     {canEdit && (
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -922,70 +977,68 @@ export default function RehearsalDetail() {
                         <span className="font-medium text-gray-900">
                           {att.member_name}
                         </span>
-                        {att.manual_override && (
-                          <span
-                            className="ml-2 text-xs text-orange-600 cursor-help"
-                            title={att.override_reason || '已手动调整'}
-                          >
-                            (已调整{att.override_reason ? `: ${att.override_reason}` : ''})
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        {getDetectionIcon(att.detected_before)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        {getDetectionIcon(att.detected_after)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(att.status)}
+                        {renderAttendanceSquares(att)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {editingAttendance === att.member_id ? (
                           <div className="flex items-center space-x-2">
-                            <label className="flex items-center">
+                            <div className="inline-flex border rounded overflow-hidden">
+                              <label
+                                className={`px-2 py-1 text-xs cursor-pointer ${
+                                  leaveForm.leave_before
+                                    ? 'bg-blue-500 text-white'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={leaveForm.leave_before}
+                                  onChange={(e) =>
+                                    setLeaveForm((prev) => ({
+                                      ...prev,
+                                      leave_before: e.target.checked,
+                                    }))
+                                  }
+                                  className="sr-only"
+                                />
+                                前
+                              </label>
+                              <label
+                                className={`px-2 py-1 text-xs cursor-pointer border-l ${
+                                  leaveForm.leave_after
+                                    ? 'bg-blue-500 text-white'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={leaveForm.leave_after}
+                                  onChange={(e) =>
+                                    setLeaveForm((prev) => ({
+                                      ...prev,
+                                      leave_after: e.target.checked,
+                                    }))
+                                  }
+                                  className="sr-only"
+                                />
+                                后
+                              </label>
+                            </div>
+                            {(leaveForm.leave_before || leaveForm.leave_after) && (
                               <input
-                                type="checkbox"
-                                checked={leaveForm.has_leave}
+                                type="text"
+                                value={leaveForm.leave_reason}
                                 onChange={(e) =>
                                   setLeaveForm((prev) => ({
                                     ...prev,
-                                    has_leave: e.target.checked,
+                                    leave_reason: e.target.value,
                                   }))
                                 }
-                                className="mr-2"
+                                placeholder="原因"
+                                className="form-input py-1 text-sm w-20"
                               />
-                              请假
-                            </label>
-                            {leaveForm.has_leave && (
-                              <>
-                                <select
-                                  value={leaveForm.leave_type}
-                                  onChange={(e) =>
-                                    setLeaveForm((prev) => ({
-                                      ...prev,
-                                      leave_type: e.target.value as 'full' | 'late' | 'early',
-                                    }))
-                                  }
-                                  className="form-input py-1 text-sm w-20"
-                                >
-                                  <option value="full">全程</option>
-                                  <option value="late">迟到</option>
-                                  <option value="early">早退</option>
-                                </select>
-                                <input
-                                  type="text"
-                                  value={leaveForm.leave_reason}
-                                  onChange={(e) =>
-                                    setLeaveForm((prev) => ({
-                                      ...prev,
-                                      leave_reason: e.target.value,
-                                    }))
-                                  }
-                                  placeholder="原因"
-                                  className="form-input py-1 text-sm w-24"
-                                />
-                              </>
                             )}
                             <button
                               onClick={() => handleUpdateLeave(att.member_id)}
@@ -1001,19 +1054,40 @@ export default function RehearsalDetail() {
                             </button>
                           </div>
                         ) : (
-                          <span className="text-sm text-gray-500">
-                            {att.has_leave ? (
-                              <>
-                                {att.leave_type === 'full'
-                                  ? '全程请假'
-                                  : att.leave_type === 'late'
-                                    ? '迟到请假'
-                                    : '早退请假'}
-                                {att.leave_reason && ` (${att.leave_reason})`}
-                              </>
-                            ) : (
-                              '-'
-                            )}
+                          <span className="text-sm text-gray-700">
+                            {(() => {
+                              const notes: string[] = [];
+                              // 请假信息
+                              if (att.has_leave) {
+                                const reason = att.leave_reason ? `(${att.leave_reason})` : '';
+                                if (att.leave_type === 'full') {
+                                  notes.push(`请假${reason}`);
+                                } else if (att.leave_type === 'late') {
+                                  notes.push(`迟到假${reason}`);
+                                } else if (att.leave_type === 'early') {
+                                  notes.push(`早退假${reason}`);
+                                }
+                              }
+                              // 修改信息
+                              if (att.manual_override) {
+                                const reason = att.override_reason ? `(${att.override_reason})` : '';
+                                const overrideBefore = ['normal', 'early_leave'].includes(att.status);
+                                const overrideAfter = ['normal', 'late'].includes(att.status);
+                                if (!att.detected_before && overrideBefore) {
+                                  notes.push(`未迟到${reason}`);
+                                }
+                                if (!att.detected_after && overrideAfter) {
+                                  notes.push(`未早退${reason}`);
+                                }
+                                if (att.detected_before && !overrideBefore) {
+                                  notes.push(`迟到${reason}`);
+                                }
+                                if (att.detected_after && !overrideAfter) {
+                                  notes.push(`早退${reason}`);
+                                }
+                              }
+                              return notes.length > 0 ? notes.join(', ') : '-';
+                            })()}
                           </span>
                         )}
                       </td>
@@ -1021,21 +1095,48 @@ export default function RehearsalDetail() {
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                           {editingOverride === att.member_id ? (
                             <div className="flex items-center justify-end space-x-2">
-                              <select
-                                value={overrideForm.status}
-                                onChange={(e) =>
-                                  setOverrideForm((prev) => ({
-                                    ...prev,
-                                    status: e.target.value as AttendanceStatus,
-                                  }))
-                                }
-                                className="form-input py-1 text-sm w-20"
-                              >
-                                <option value="normal">正常</option>
-                                <option value="late">迟到</option>
-                                <option value="early_leave">早退</option>
-                                <option value="absent">缺勤</option>
-                              </select>
+                              <div className="inline-flex border rounded overflow-hidden">
+                                <label
+                                  className={`px-2 py-1 text-xs cursor-pointer ${
+                                    overrideForm.before_present
+                                      ? 'bg-green-500 text-white'
+                                      : 'bg-orange-500 text-white'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={overrideForm.before_present}
+                                    onChange={(e) =>
+                                      setOverrideForm((prev) => ({
+                                        ...prev,
+                                        before_present: e.target.checked,
+                                      }))
+                                    }
+                                    className="sr-only"
+                                  />
+                                  前
+                                </label>
+                                <label
+                                  className={`px-2 py-1 text-xs cursor-pointer border-l ${
+                                    overrideForm.after_present
+                                      ? 'bg-green-500 text-white'
+                                      : 'bg-orange-500 text-white'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={overrideForm.after_present}
+                                    onChange={(e) =>
+                                      setOverrideForm((prev) => ({
+                                        ...prev,
+                                        after_present: e.target.checked,
+                                      }))
+                                    }
+                                    className="sr-only"
+                                  />
+                                  后
+                                </label>
+                              </div>
                               <input
                                 type="text"
                                 value={overrideForm.override_reason}
@@ -1046,7 +1147,7 @@ export default function RehearsalDetail() {
                                   }))
                                 }
                                 placeholder="原因（必填）"
-                                className="form-input py-1 text-sm w-28"
+                                className="form-input py-1 text-sm w-24"
                               />
                               <button
                                 onClick={() => handleUpdateOverride(att.member_id)}
