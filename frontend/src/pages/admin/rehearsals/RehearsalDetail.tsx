@@ -81,6 +81,13 @@ export default function RehearsalDetail() {
     leave_reason: '',
   });
 
+  // 手动修改状态的编辑状态
+  const [editingOverride, setEditingOverride] = useState<number | null>(null);
+  const [overrideForm, setOverrideForm] = useState({
+    status: 'normal' as AttendanceStatus,
+    override_reason: '',
+  });
+
   // Face recognition state
   const [checkInRecognition, setCheckInRecognition] = useState<RecognitionState>({
     isUploading: false,
@@ -151,12 +158,55 @@ export default function RehearsalDetail() {
   };
 
   const startEditLeave = (att: Attendance) => {
+    setEditingOverride(null);  // 关闭修改编辑
     setEditingAttendance(att.member_id);
     setLeaveForm({
       has_leave: att.has_leave,
       leave_type: (att.leave_type as 'full' | 'late' | 'early') || 'full',
       leave_reason: att.leave_reason || '',
     });
+  };
+
+  // 开始编辑手动状态
+  const startEditOverride = (att: Attendance) => {
+    setEditingAttendance(null);  // 关闭请假编辑
+    setEditingOverride(att.member_id);
+    setOverrideForm({
+      status: att.manual_override ? att.status : 'normal',
+      override_reason: att.override_reason || '',
+    });
+  };
+
+  // 保存手动修改
+  const handleUpdateOverride = async (memberId: number) => {
+    if (!overrideForm.override_reason.trim()) {
+      setError('请填写修改原因');
+      return;
+    }
+    try {
+      const updated = await rehearsalsApi.updateAttendance(Number(id), memberId, {
+        manual_override: true,
+        status: overrideForm.status,
+        override_reason: overrideForm.override_reason,
+      });
+      setAttendance(attendance.map((a) => (a.member_id === memberId ? updated : a)));
+      setEditingOverride(null);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '更新失败');
+    }
+  };
+
+  // 重置为自动计算状态
+  const handleResetOverride = async (memberId: number) => {
+    try {
+      const updated = await rehearsalsApi.updateAttendance(Number(id), memberId, {
+        manual_override: false,
+        override_reason: '',
+      });
+      setAttendance(attendance.map((a) => (a.member_id === memberId ? updated : a)));
+    } catch (err: any) {
+      setError(err.response?.data?.error || '重置失败');
+    }
   };
 
   const handlePhotoUpload = async (file: File, photoType: PhotoType) => {
@@ -873,8 +923,11 @@ export default function RehearsalDetail() {
                           {att.member_name}
                         </span>
                         {att.manual_override && (
-                          <span className="ml-2 text-xs text-orange-600">
-                            (已手动调整)
+                          <span
+                            className="ml-2 text-xs text-orange-600 cursor-help"
+                            title={att.override_reason || '已手动调整'}
+                          >
+                            (已调整{att.override_reason ? `: ${att.override_reason}` : ''})
                           </span>
                         )}
                       </td>
@@ -966,14 +1019,73 @@ export default function RehearsalDetail() {
                       </td>
                       {canEdit && (
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                          {editingAttendance !== att.member_id && (
-                            <button
-                              onClick={() => startEditLeave(att)}
-                              className="text-primary-600 hover:text-primary-700"
-                            >
-                              编辑请假
-                            </button>
-                          )}
+                          {editingOverride === att.member_id ? (
+                            <div className="flex items-center justify-end space-x-2">
+                              <select
+                                value={overrideForm.status}
+                                onChange={(e) =>
+                                  setOverrideForm((prev) => ({
+                                    ...prev,
+                                    status: e.target.value as AttendanceStatus,
+                                  }))
+                                }
+                                className="form-input py-1 text-sm w-20"
+                              >
+                                <option value="normal">正常</option>
+                                <option value="late">迟到</option>
+                                <option value="early_leave">早退</option>
+                                <option value="absent">缺勤</option>
+                              </select>
+                              <input
+                                type="text"
+                                value={overrideForm.override_reason}
+                                onChange={(e) =>
+                                  setOverrideForm((prev) => ({
+                                    ...prev,
+                                    override_reason: e.target.value,
+                                  }))
+                                }
+                                placeholder="原因（必填）"
+                                className="form-input py-1 text-sm w-28"
+                              />
+                              <button
+                                onClick={() => handleUpdateOverride(att.member_id)}
+                                className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700"
+                              >
+                                保存
+                              </button>
+                              <button
+                                onClick={() => setEditingOverride(null)}
+                                className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                              >
+                                取消
+                              </button>
+                            </div>
+                          ) : editingAttendance !== att.member_id ? (
+                            <div className="space-x-2">
+                              <button
+                                onClick={() => startEditLeave(att)}
+                                className="text-primary-600 hover:text-primary-700"
+                              >
+                                请假
+                              </button>
+                              <button
+                                onClick={() => startEditOverride(att)}
+                                className="text-orange-600 hover:text-orange-700"
+                              >
+                                修改
+                              </button>
+                              {att.manual_override && (
+                                <button
+                                  onClick={() => handleResetOverride(att.member_id)}
+                                  className="text-gray-500 hover:text-gray-700"
+                                  title="恢复自动计算"
+                                >
+                                  重置
+                                </button>
+                              )}
+                            </div>
+                          ) : null}
                         </td>
                       )}
                     </tr>
