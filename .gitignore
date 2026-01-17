@@ -39,3 +39,6 @@ Thumbs.db
 # Build artifacts
 build/
 *.tsbuildinfo
+
+# Uploaded files
+backend/uploads/
