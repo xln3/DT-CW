@@ -1,89 +1,37 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Users, Calendar, TrendingUp, AlertCircle } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Star } from 'lucide-react';
 import { publicApi } from '../../services/api';
-
-interface MemberAttendance {
-  member_id: number;
-  member_name: string;
-  student_id: string;
-  total_rehearsals: number;
-  normal_count: number;
-  late_count: number;
-  absent_count: number;
-  leave_count: number;
-  attendance_rate: number;
-}
-
-interface ProgramAttendanceData {
-  program: {
-    id: number;
-    name: string;
-    category: string;
-  };
-  stats: {
-    total_rehearsals: number;
-    completed_rehearsals: number;
-    total_members: number;
-    average_attendance_rate: number;
-  };
-  members: MemberAttendance[];
-  recent_rehearsals: {
-    id: number;
-    date: string;
-    location: string;
-    status?: string;
-    attendance_rate: number;
-  }[];
-}
+import type { ProgramMatrixData } from '../../types';
+import ThreeSegmentCell from './components/ThreeSegmentCell';
 
 export default function ProgramAttendance() {
   const { id } = useParams();
-  const [data, setData] = useState<ProgramAttendanceData | null>(null);
+  const [data, setData] = useState<ProgramMatrixData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'members' | 'rehearsals'>('members');
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const result = await publicApi.getProgramAttendance(Number(id));
+      const result = await publicApi.getProgramMatrix(Number(id));
       setData(result);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '加载失败');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || '加载失败');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const getAttendanceColor = (rate: number) => {
-    if (rate >= 90) return 'text-green-600';
-    if (rate >= 70) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getAttendanceBadge = (rate: number) => {
-    if (rate >= 90)
-      return (
-        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-          优秀
-        </span>
-      );
-    if (rate >= 70)
-      return (
-        <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
-          良好
-        </span>
-      );
-    return (
-      <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
-        需改进
-      </span>
-    );
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
   };
 
   if (isLoading) {
@@ -112,6 +60,8 @@ export default function ProgramAttendance() {
     );
   }
 
+  const hasData = data.members.length > 0 && data.rehearsals.length > 0;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -128,184 +78,110 @@ export default function ProgramAttendance() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="card">
-          <div className="card-body text-center">
-            <Users className="w-8 h-8 text-primary-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-gray-900">
-              {data.stats.total_members}
-            </p>
-            <p className="text-sm text-gray-500">成员人数</p>
-          </div>
+      {/* Legend */}
+      <div className="flex items-center space-x-6 text-sm">
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-4 bg-green-500 rounded" />
+          <span className="text-gray-600">出勤</span>
         </div>
-        <div className="card">
-          <div className="card-body text-center">
-            <Calendar className="w-8 h-8 text-primary-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-gray-900">
-              {data.stats.completed_rehearsals}/{data.stats.total_rehearsals}
-            </p>
-            <p className="text-sm text-gray-500">已完成/总排练</p>
-          </div>
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-4 bg-orange-500 rounded" />
+          <span className="text-gray-600">缺勤</span>
         </div>
-        <div className="card col-span-2">
-          <div className="card-body text-center">
-            <TrendingUp className="w-8 h-8 text-primary-600 mx-auto mb-2" />
-            <p
-              className={`text-3xl font-bold ${getAttendanceColor(data.stats.average_attendance_rate)}`}
-            >
-              {data.stats.average_attendance_rate.toFixed(1)}%
-            </p>
-            <p className="text-sm text-gray-500">平均出勤率</p>
-          </div>
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-4 bg-blue-500 rounded" />
+          <span className="text-gray-600">请假</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Star className="w-4 h-4 text-yellow-500" />
+          <span className="text-gray-600">负责人</span>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('members')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'members'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            成员考勤
-          </button>
-          <button
-            onClick={() => setActiveTab('rehearsals')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'rehearsals'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            排练记录
-          </button>
-        </nav>
-      </div>
-
-      {/* Content */}
-      {activeTab === 'members' && (
+      {/* Matrix Table */}
+      {!hasData ? (
         <div className="card">
           <div className="card-body">
-            {data.members.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">暂无成员数据</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        姓名
-                      </th>
-                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        正常
-                      </th>
-                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        迟到
-                      </th>
-                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        缺勤
-                      </th>
-                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        请假
-                      </th>
-                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        出勤率
-                      </th>
-                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        评级
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {data.members.map((member) => (
-                      <tr key={member.member_id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div>
-                            <p className="font-medium text-gray-900">
-                              {member.member_name}
-                            </p>
-                            {member.student_id && (
-                              <p className="text-sm text-gray-500">
-                                {member.student_id}
-                              </p>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <span className="text-green-600 font-medium">
-                            {member.normal_count}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <span className="text-yellow-600 font-medium">
-                            {member.late_count}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <span className="text-red-600 font-medium">
-                            {member.absent_count}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <span className="text-blue-600 font-medium">
-                            {member.leave_count}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <span
-                            className={`font-semibold ${getAttendanceColor(member.attendance_rate)}`}
-                          >
-                            {member.attendance_rate.toFixed(1)}%
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          {getAttendanceBadge(member.attendance_rate)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <p className="text-center text-gray-500 py-8">暂无考勤数据</p>
           </div>
         </div>
-      )}
-
-      {activeTab === 'rehearsals' && (
-        <div className="card">
-          <div className="card-body">
-            {data.recent_rehearsals.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">暂无排练记录</p>
-            ) : (
-              <div className="space-y-3">
-                {data.recent_rehearsals.map((rehearsal) => (
-                  <div
-                    key={rehearsal.id}
-                    className="p-4 bg-gray-50 rounded-lg flex items-center justify-between"
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th
+                    className="sticky left-0 z-20 bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200"
+                    style={{ minWidth: '120px' }}
                   >
-                    <div>
-                      <p className="font-medium text-gray-900">{rehearsal.date}</p>
-                      <p className="text-sm text-gray-500">
-                        {rehearsal.location || '地点待定'}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p
-                        className={`text-lg font-semibold ${getAttendanceColor(rehearsal.attendance_rate)}`}
-                      >
-                        {rehearsal.attendance_rate.toFixed(1)}%
-                      </p>
-                      <p className="text-xs text-gray-500">出勤率</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                    队员
+                  </th>
+                  {data.rehearsals.map((rehearsal) => (
+                    <th
+                      key={rehearsal.id}
+                      className={`px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                        !rehearsal.counts ? 'opacity-50' : ''
+                      }`}
+                      style={{ minWidth: '50px' }}
+                      title={!rehearsal.counts ? '不计入考勤统计' : undefined}
+                    >
+                      {formatDate(rehearsal.date)}
+                    </th>
+                  ))}
+                  <th
+                    className="sticky right-0 z-20 bg-gray-50 px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200"
+                    style={{ minWidth: '70px' }}
+                  >
+                    A/B
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {data.members.map((member) => {
+                  const summary = data.summary[member.id];
+                  return (
+                    <tr key={member.id} className="hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 bg-white px-4 py-3 border-r border-gray-200">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-medium text-gray-900">
+                            {member.name}
+                          </span>
+                          {member.is_leader && (
+                            <Star className="w-4 h-4 text-yellow-500" />
+                          )}
+                        </div>
+                      </td>
+                      {data.rehearsals.map((rehearsal) => {
+                        const cell = data.matrix[member.id]?.[rehearsal.id];
+                        return (
+                          <td
+                            key={rehearsal.id}
+                            className="px-2 py-3 text-center"
+                          >
+                            <ThreeSegmentCell
+                              cell={cell}
+                              counts={rehearsal.counts}
+                            />
+                          </td>
+                        );
+                      })}
+                      <td className="sticky right-0 z-10 bg-white px-4 py-3 text-center border-l border-gray-200">
+                        {summary && (
+                          <span className="text-sm">
+                            <span className="text-green-600 font-medium">
+                              {summary.attended}
+                            </span>
+                            <span className="text-gray-400">/</span>
+                            <span className="text-gray-900">{summary.total}</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

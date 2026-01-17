@@ -619,6 +619,61 @@ export const MATCH_STATUS_DISPLAY: Record<FaceMatchStatus, string> = {
   self_annotated: '自选',
 };
 
+// Public Attendance Matrix types
+export interface OverviewMatrixProgram {
+  id: number;
+  name: string;
+  category: string;
+}
+
+export interface OverviewMatrixCell {
+  rehearsal_id: number;
+  counts: boolean;
+  total: number;
+  normal: number;
+  partial: number;
+  absent: number;
+}
+
+export interface OverviewMatrixData {
+  semester: { id: number; name: string } | null;
+  programs: OverviewMatrixProgram[];
+  dates: string[];
+  matrix: Record<number, Record<string, OverviewMatrixCell>>;
+}
+
+export interface ProgramMatrixMember {
+  id: number;
+  name: string;
+  is_leader: boolean;
+}
+
+export interface ProgramMatrixRehearsal {
+  id: number;
+  date: string;
+  counts: boolean;
+}
+
+export interface ProgramMatrixCell {
+  status: AttendanceStatus;
+  detected_before: boolean;
+  detected_after: boolean;
+  has_leave: boolean;
+}
+
+export interface ProgramMatrixSummary {
+  attended: number;
+  total: number;
+}
+
+export interface ProgramMatrixData {
+  program: { id: number; name: string; category: string };
+  members: ProgramMatrixMember[];
+  rehearsals: ProgramMatrixRehearsal[];
+  matrix: Record<number, Record<number, ProgramMatrixCell | null>>;
+  summary: Record<number, ProgramMatrixSummary>;
+}
+
 // Schedule types (for week view)
 export interface ScheduleEvent {
   id: number;

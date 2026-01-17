@@ -32,6 +32,8 @@ import type {
   WeekScheduleData,
   ScheduleEvent,
   RecognitionResult,
+  OverviewMatrixData,
+  ProgramMatrixData,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -560,6 +562,18 @@ export const publicApi = {
     const response = await api.get('/public/attendance/members', {
       params: { search, semester_id: semesterId },
     });
+    return response.data;
+  },
+
+  getOverviewMatrix: async (semesterId?: number): Promise<OverviewMatrixData> => {
+    const response = await api.get<OverviewMatrixData>('/public/attendance/overview/matrix', {
+      params: { semester_id: semesterId },
+    });
+    return response.data;
+  },
+
+  getProgramMatrix: async (programId: number): Promise<ProgramMatrixData> => {
+    const response = await api.get<ProgramMatrixData>(`/public/attendance/programs/${programId}/matrix`);
     return response.data;
   },
 };

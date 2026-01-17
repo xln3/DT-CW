@@ -257,6 +257,219 @@ def program_attendance(program_id):
     })
 
 
+@public_attendance_bp.route('/overview/matrix', methods=['GET'])
+def attendance_overview_matrix():
+    """Get attendance matrix for all programs (programs × dates)."""
+    semester_id = request.args.get('semester_id', type=int)
+
+    if not semester_id:
+        current_semester = Semester.get_current()
+        semester_id = current_semester.id if current_semester else None
+
+    semester = None
+    if semester_id:
+        semester = Semester.query.get(semester_id)
+
+    programs = Program.query.filter_by(
+        status='active'
+    ).order_by(Program.name).all()
+
+    if semester_id:
+        programs = [p for p in programs if p.semester_id == semester_id]
+
+    # Collect all completed rehearsal dates across all programs
+    all_dates = set()
+    program_rehearsals = {}  # program_id -> list of rehearsals
+
+    for program in programs:
+        all_rehearsals = program.rehearsals.all()
+        completed_rehearsals = [r for r in all_rehearsals
+                               if r.status != 'cancelled' and is_rehearsal_completed(r)]
+        program_rehearsals[program.id] = completed_rehearsals
+        for r in completed_rehearsals:
+            all_dates.add(r.scheduled_date.isoformat())
+
+    # Sort dates chronologically
+    sorted_dates = sorted(all_dates)
+
+    # Build matrix data
+    program_list = []
+    matrix = {}
+
+    for program in programs:
+        program_list.append({
+            'id': program.id,
+            'name': program.name,
+            'category': program.category or ''
+        })
+
+        matrix[program.id] = {}
+        rehearsals = program_rehearsals.get(program.id, [])
+
+        for rehearsal in rehearsals:
+            date_str = rehearsal.scheduled_date.isoformat()
+            records = rehearsal.attendance_records.all()
+            total = len(records)
+
+            counts = rehearsal.counts_towards_attendance
+            counts_towards = counts if counts is not None else True
+
+            # Count by status
+            normal_count = 0
+            partial_count = 0  # late, early_leave, leave_late, leave_early
+            absent_count = 0   # absent, leave_absent
+
+            for r in records:
+                if r.status == Attendance.STATUS_NORMAL:
+                    normal_count += 1
+                elif r.status in [Attendance.STATUS_LATE, Attendance.STATUS_EARLY_LEAVE,
+                                 Attendance.STATUS_LEAVE_LATE, Attendance.STATUS_LEAVE_EARLY]:
+                    partial_count += 1
+                elif r.status in [Attendance.STATUS_ABSENT, Attendance.STATUS_LEAVE_ABSENT]:
+                    absent_count += 1
+
+            matrix[program.id][date_str] = {
+                'rehearsal_id': rehearsal.id,
+                'counts': counts_towards,
+                'total': total,
+                'normal': normal_count,
+                'partial': partial_count,
+                'absent': absent_count
+            }
+
+    return jsonify({
+        'semester': {
+            'id': semester.id,
+            'name': semester.name
+        } if semester else None,
+        'programs': program_list,
+        'dates': sorted_dates,
+        'matrix': matrix
+    })
+
+
+@public_attendance_bp.route('/programs/<int:program_id>/matrix', methods=['GET'])
+def program_attendance_matrix(program_id):
+    """Get attendance matrix for a program (members × rehearsals)."""
+    from pypinyin import lazy_pinyin
+
+    program = Program.query.get_or_404(program_id)
+
+    # Get completed rehearsals
+    all_rehearsals = program.rehearsals.order_by(Rehearsal.scheduled_date).all()
+    completed_rehearsals = [r for r in all_rehearsals
+                          if r.status != 'cancelled' and is_rehearsal_completed(r)]
+
+    # Get active members with leader info
+    program_members = ProgramMember.query.filter_by(
+        program_id=program.id,
+        status='active'
+    ).all()
+
+    # Sort members: leaders first, then by pinyin
+    def member_sort_key(pm):
+        is_leader = pm.is_leader if hasattr(pm, 'is_leader') else False
+        name = pm.member.name if pm.member else ''
+        pinyin = ''.join(lazy_pinyin(name))
+        return (0 if is_leader else 1, pinyin)
+
+    program_members.sort(key=member_sort_key)
+
+    # Build member list
+    member_list = []
+    for pm in program_members:
+        if pm.member:
+            is_leader = pm.is_leader if hasattr(pm, 'is_leader') else False
+            member_list.append({
+                'id': pm.member.id,
+                'name': pm.member.name,
+                'is_leader': is_leader
+            })
+
+    # Build rehearsal list
+    rehearsal_list = []
+    for r in completed_rehearsals:
+        counts = r.counts_towards_attendance
+        counts_towards = counts if counts is not None else True
+        rehearsal_list.append({
+            'id': r.id,
+            'date': r.scheduled_date.isoformat(),
+            'counts': counts_towards
+        })
+
+    # Build attendance matrix
+    matrix = {}
+    for pm in program_members:
+        if not pm.member:
+            continue
+        member_id = pm.member.id
+        matrix[member_id] = {}
+
+        for rehearsal in completed_rehearsals:
+            record = Attendance.query.filter_by(
+                rehearsal_id=rehearsal.id,
+                member_id=member_id
+            ).first()
+
+            if record:
+                matrix[member_id][rehearsal.id] = {
+                    'status': record.status,
+                    'detected_before': record.detected_before,
+                    'detected_after': record.detected_after,
+                    'has_leave': record.has_leave
+                }
+            else:
+                matrix[member_id][rehearsal.id] = None
+
+    # Calculate summary (A/B format: attended / total)
+    summary = {}
+    for pm in program_members:
+        if not pm.member:
+            continue
+        member_id = pm.member.id
+        attended = 0
+        total = 0
+
+        for rehearsal in completed_rehearsals:
+            counts = rehearsal.counts_towards_attendance
+            counts_towards = counts if counts is not None else True
+            if not counts_towards:
+                continue
+
+            record = Attendance.query.filter_by(
+                rehearsal_id=rehearsal.id,
+                member_id=member_id
+            ).first()
+
+            if record:
+                total += 1
+                # Attended = normal + any leave status
+                if record.status in [
+                    Attendance.STATUS_NORMAL,
+                    Attendance.STATUS_LEAVE_ABSENT,
+                    Attendance.STATUS_LEAVE_LATE,
+                    Attendance.STATUS_LEAVE_EARLY
+                ]:
+                    attended += 1
+
+        summary[member_id] = {
+            'attended': attended,
+            'total': total
+        }
+
+    return jsonify({
+        'program': {
+            'id': program.id,
+            'name': program.name,
+            'category': program.category or ''
+        },
+        'members': member_list,
+        'rehearsals': rehearsal_list,
+        'matrix': matrix,
+        'summary': summary
+    })
+
+
 @public_attendance_bp.route('/members', methods=['GET'])
 def member_attendance():
     """Search and get attendance for individual members."""
