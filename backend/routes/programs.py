@@ -2,9 +2,10 @@
 import csv
 import io
 from flask import Blueprint, request, jsonify, g
+from pypinyin import lazy_pinyin
 
 from database import db
-from models import Program, ProgramMember, Member, Semester, AuditLog, User
+from models import Program, ProgramMember, Member, Semester, AuditLog, User, Rehearsal, Attendance
 from auth.decorators import login_required, committee_required
 from auth.permissions import Permission, check_program_permission
 
@@ -196,7 +197,7 @@ def delete_program(program_id):
 @programs_bp.route('/<int:program_id>/members', methods=['GET'])
 @login_required
 def get_program_members(program_id):
-    """Get members of a program."""
+    """Get members of a program, sorted by: leaders first, then by pinyin."""
     program = Program.query.get_or_404(program_id)
 
     user = g.current_user
@@ -206,8 +207,11 @@ def get_program_members(program_id):
     status = request.args.get('status', 'active')
     members = program.members.filter_by(status=status).all()
 
+    # Sort: leaders first, then by pinyin
+    sorted_members = _sort_members_by_pinyin(members)
+
     return jsonify({
-        'members': [pm.to_dict() for pm in members]
+        'members': [pm.to_dict() for pm in sorted_members]
     })
 
 
@@ -257,6 +261,9 @@ def add_program_member(program_id):
 
     db.session.commit()
 
+    # Create attendance records for all existing rehearsals of this program
+    _sync_member_attendance(program_id, member_id)
+
     return jsonify({
         'message': '成员添加成功'
     })
@@ -279,6 +286,7 @@ def batch_add_program_members(program_id):
     member_ids = data['member_ids']
     role = data.get('role', '').strip() or None
     added = 0
+    added_member_ids = []
 
     for member_id in member_ids:
         member = Member.query.get(member_id)
@@ -296,6 +304,7 @@ def batch_add_program_members(program_id):
                 existing.left_at = None
                 existing.role = role
                 added += 1
+                added_member_ids.append(member_id)
         else:
             pm = ProgramMember(
                 program_id=program_id,
@@ -305,8 +314,13 @@ def batch_add_program_members(program_id):
             )
             db.session.add(pm)
             added += 1
+            added_member_ids.append(member_id)
 
     db.session.commit()
+
+    # Sync attendance records for newly added members
+    for mid in added_member_ids:
+        _sync_member_attendance(program_id, mid)
 
     return jsonify({
         'message': f'成功添加{added}名成员'
@@ -336,6 +350,129 @@ def remove_program_member(program_id, member_id):
     db.session.commit()
 
     return jsonify({'message': '成员已移除'})
+
+
+@programs_bp.route('/<int:program_id>/members/<int:member_id>/leader', methods=['PUT'])
+@login_required
+def set_member_leader(program_id, member_id):
+    """Set or unset a member as program leader."""
+    user = g.current_user
+
+    if not check_program_permission(user, Permission.PROGRAM_EDIT, program_id):
+        return jsonify({'error': '无权修改该节目'}), 403
+
+    pm = ProgramMember.query.filter_by(
+        program_id=program_id,
+        member_id=member_id,
+        status='active'
+    ).first()
+
+    if not pm:
+        return jsonify({'error': '该成员不在节目中'}), 404
+
+    data = request.get_json()
+    if data is None:
+        return jsonify({'error': '请提供数据'}), 400
+
+    is_leader = data.get('is_leader', False)
+    pm.is_leader = bool(is_leader)
+    db.session.commit()
+
+    return jsonify({
+        'message': '负责人设置成功' if is_leader else '已取消负责人',
+        'member': pm.to_dict()
+    })
+
+
+@programs_bp.route('/<int:program_id>/attendance-matrix', methods=['GET'])
+@login_required
+def get_attendance_matrix(program_id):
+    """Get attendance matrix for a program.
+
+    Returns:
+    - members: List of members (sorted: leaders first, then by pinyin)
+    - rehearsals: List of completed rehearsals (sorted by date)
+    - matrix: Dict mapping member_id -> rehearsal_id -> attendance status
+              If member was not in program at rehearsal time, status is None
+    """
+    from datetime import datetime
+
+    program = Program.query.get_or_404(program_id)
+
+    user = g.current_user
+    if user.is_program_manager() and not user.can_manage_program(program_id):
+        return jsonify({'error': '无权访问该节目'}), 403
+
+    # Get all program members (including those who left, for historical data)
+    all_members = program.members.all()
+    # For active members, sort by leader + pinyin
+    active_members = [pm for pm in all_members if pm.status == 'active']
+    sorted_active = _sort_members_by_pinyin(active_members)
+
+    # Get completed rehearsals (past date or past end time)
+    now = datetime.now()
+    today = now.date()
+    current_time = now.time()
+
+    all_rehearsals = program.rehearsals.filter(
+        Rehearsal.status != 'cancelled'
+    ).order_by(Rehearsal.scheduled_date.asc()).all()
+
+    completed_rehearsals = []
+    for r in all_rehearsals:
+        if r.scheduled_date < today:
+            completed_rehearsals.append(r)
+        elif r.scheduled_date == today and r.scheduled_end_time and r.scheduled_end_time <= current_time:
+            completed_rehearsals.append(r)
+
+    # Build attendance matrix
+    # For each member, check if they were in the program at rehearsal time
+    matrix = {}
+    for pm in sorted_active:
+        member_id = pm.member_id
+        matrix[member_id] = {}
+        joined_date = pm.joined_at.date() if pm.joined_at else None
+        left_date = pm.left_at.date() if pm.left_at else None
+
+        for rehearsal in completed_rehearsals:
+            rehearsal_date = rehearsal.scheduled_date
+            # Check if member was in program at this time
+            was_in_program = True
+            if joined_date and rehearsal_date < joined_date:
+                was_in_program = False
+            if left_date and rehearsal_date > left_date:
+                was_in_program = False
+
+            if not was_in_program:
+                matrix[member_id][rehearsal.id] = None
+            else:
+                # Get attendance record
+                record = Attendance.query.filter_by(
+                    rehearsal_id=rehearsal.id,
+                    member_id=member_id
+                ).first()
+                if record:
+                    matrix[member_id][rehearsal.id] = {
+                        'status': record.status,
+                        'has_leave': record.has_leave,
+                        'leave_type': record.leave_type,
+                        'detected_before': record.detected_before,
+                        'detected_after': record.detected_after,
+                    }
+                else:
+                    # No record exists (shouldn't happen, but handle gracefully)
+                    matrix[member_id][rehearsal.id] = {'status': 'absent'}
+
+    return jsonify({
+        'members': [pm.to_dict() for pm in sorted_active],
+        'rehearsals': [{
+            'id': r.id,
+            'scheduled_date': str(r.scheduled_date),
+            'scheduled_start_time': str(r.scheduled_start_time) if r.scheduled_start_time else None,
+            'scheduled_end_time': str(r.scheduled_end_time) if r.scheduled_end_time else None,
+        } for r in completed_rehearsals],
+        'matrix': matrix
+    })
 
 
 @programs_bp.route('/import-csv', methods=['POST'])
@@ -484,3 +621,31 @@ def import_programs_csv():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'导入失败: {str(e)}'}), 500
+
+
+def _sync_member_attendance(program_id, member_id):
+    """Create attendance records for a member for all existing rehearsals of the program."""
+    rehearsals = Rehearsal.query.filter_by(program_id=program_id).all()
+    for rehearsal in rehearsals:
+        existing = Attendance.query.filter_by(
+            rehearsal_id=rehearsal.id,
+            member_id=member_id
+        ).first()
+        if not existing:
+            record = Attendance(
+                rehearsal_id=rehearsal.id,
+                member_id=member_id,
+                status=Attendance.STATUS_ABSENT
+            )
+            db.session.add(record)
+    db.session.commit()
+
+
+def _sort_members_by_pinyin(program_members):
+    """Sort program members: leaders first, then by pinyin of member name."""
+    def sort_key(pm):
+        name = pm.member.name if pm.member else ''
+        pinyin_str = ''.join(lazy_pinyin(name))
+        # Leaders come first (False < True, so we use not is_leader)
+        return (not (pm.is_leader or False), pinyin_str)
+    return sorted(program_members, key=sort_key)

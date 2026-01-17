@@ -35,8 +35,10 @@ class Rehearsal(db.Model):
     # Relationships
     program = db.relationship('Program', back_populates='rehearsals')
     teacher = db.relationship('Teacher', back_populates='rehearsals')
-    attendance_records = db.relationship('Attendance', back_populates='rehearsal', lazy='dynamic')
-    face_annotations = db.relationship('FaceAnnotation', back_populates='rehearsal', lazy='dynamic')
+    attendance_records = db.relationship('Attendance', back_populates='rehearsal', lazy='dynamic',
+                                         cascade='all, delete-orphan')
+    face_annotations = db.relationship('FaceAnnotation', back_populates='rehearsal', lazy='dynamic',
+                                       cascade='all, delete-orphan')
 
     # Rehearsal status constants
     STATUS_SCHEDULED = 'scheduled'

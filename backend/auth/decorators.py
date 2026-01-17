@@ -17,14 +17,17 @@ def login_required(f):
             user = User.query.get(user_id)
 
             if not user:
+                print(f"[AUTH] User not found: {user_id}")
                 return jsonify({'error': '用户不存在'}), 401
 
             if user.status != 'active':
+                print(f"[AUTH] User disabled: {user.username}")
                 return jsonify({'error': '账号已被禁用'}), 403
 
             g.current_user = user
             return f(*args, **kwargs)
         except Exception as e:
+            print(f"[AUTH] JWT error: {e}")
             return jsonify({'error': '需要登录才能访问'}), 401
 
     return decorated_function
@@ -36,22 +39,28 @@ def role_required(*roles):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             try:
+                auth_header = request.headers.get('Authorization', '')
+                print(f"[AUTH] Authorization header: {auth_header[:50]}..." if len(auth_header) > 50 else f"[AUTH] Authorization header: {auth_header}")
                 verify_jwt_in_request()
                 user_id = get_jwt_identity()
                 user = User.query.get(user_id)
 
                 if not user:
+                    print(f"[AUTH] User not found: {user_id}")
                     return jsonify({'error': '用户不存在'}), 401
 
                 if user.status != 'active':
+                    print(f"[AUTH] User disabled: {user.username}")
                     return jsonify({'error': '账号已被禁用'}), 403
 
                 if user.role not in roles:
+                    print(f"[AUTH] Role denied: {user.username} has {user.role}, needs {roles}")
                     return jsonify({'error': '权限不足'}), 403
 
                 g.current_user = user
                 return f(*args, **kwargs)
             except Exception as e:
+                print(f"[AUTH] JWT error in role_required: {e}")
                 return jsonify({'error': '需要登录才能访问'}), 401
 
         return decorated_function

@@ -56,10 +56,11 @@ export const setTokens = (access: string, refresh: string) => {
 };
 
 export const getTokens = () => {
-  if (!accessToken) {
-    accessToken = localStorage.getItem('accessToken');
-    refreshToken = localStorage.getItem('refreshToken');
-  }
+  // Always sync from localStorage to ensure we have the latest tokens
+  const storedAccess = localStorage.getItem('accessToken');
+  const storedRefresh = localStorage.getItem('refreshToken');
+  if (storedAccess) accessToken = storedAccess;
+  if (storedRefresh) refreshToken = storedRefresh;
   return { accessToken, refreshToken };
 };
 
@@ -110,6 +111,10 @@ api.interceptors.response.use(
           window.location.href = '/login';
           return Promise.reject(refreshError);
         }
+      } else {
+        // No refresh token, clear everything and redirect to login
+        clearTokens();
+        window.location.href = '/login';
       }
     }
 
@@ -251,7 +256,7 @@ export const programsApi = {
   },
 
   getMembers: async (programId: number) => {
-    const response = await api.get<{ members: { member: Member; role?: string }[] }>(
+    const response = await api.get<{ members: { member: Member; role?: string; is_leader?: boolean }[] }>(
       `/admin/programs/${programId}/members`
     );
     return response.data.members;
@@ -265,11 +270,38 @@ export const programsApi = {
     await api.delete(`/admin/programs/${programId}/members/${memberId}`);
   },
 
+  setMemberLeader: async (programId: number, memberId: number, isLeader: boolean) => {
+    const response = await api.put(`/admin/programs/${programId}/members/${memberId}/leader`, {
+      is_leader: isLeader,
+    });
+    return response.data;
+  },
+
   batchAddMembers: async (programId: number, memberIds: number[], role?: string) => {
     const response = await api.post(`/admin/programs/${programId}/members/batch`, {
       member_ids: memberIds,
       role,
     });
+    return response.data;
+  },
+
+  getAttendanceMatrix: async (programId: number) => {
+    const response = await api.get<{
+      members: { member: Member; is_leader: boolean }[];
+      rehearsals: {
+        id: number;
+        scheduled_date: string;
+        scheduled_start_time: string | null;
+        scheduled_end_time: string | null;
+      }[];
+      matrix: Record<number, Record<number, {
+        status: string;
+        has_leave: boolean;
+        leave_type: string | null;
+        detected_before: boolean;
+        detected_after: boolean;
+      } | null>>;
+    }>(`/admin/programs/${programId}/attendance-matrix`);
     return response.data;
   },
 

@@ -1,10 +1,18 @@
 """Member management routes."""
 from flask import Blueprint, request, jsonify, g
+from pypinyin import lazy_pinyin
 
 from database import db
 from models import Member, AuditLog
 from auth.decorators import login_required, committee_required
 from auth.permissions import Permission, check_permission
+
+
+def _sort_members_by_pinyin(members):
+    """Sort members by pinyin of their names."""
+    def sort_key(m):
+        return ''.join(lazy_pinyin(m.name or ''))
+    return sorted(members, key=sort_key)
 
 members_bp = Blueprint('members', __name__)
 
@@ -31,10 +39,11 @@ def list_members():
             )
         )
 
-    members = query.order_by(Member.name).all()
+    members = query.all()
+    sorted_members = _sort_members_by_pinyin(members)
 
     return jsonify({
-        'members': [m.to_dict() for m in members]
+        'members': [m.to_dict() for m in sorted_members]
     })
 
 

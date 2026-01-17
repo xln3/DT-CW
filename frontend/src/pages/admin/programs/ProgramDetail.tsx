@@ -9,11 +9,34 @@ import {
   X,
   UserPlus,
   AlertCircle,
+  Star,
+  StarOff,
 } from 'lucide-react';
 import { programsApi, membersApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { Program, Member } from '../../../types';
 import { PROGRAM_CATEGORIES } from '../../../types';
+
+interface AttendanceData {
+  status: string;
+  has_leave: boolean;
+  leave_type: string | null;
+  detected_before: boolean;
+  detected_after: boolean;
+}
+
+interface ProgramMemberData {
+  member: Member;
+  is_leader?: boolean;
+  role?: string;
+}
+
+interface RehearsalData {
+  id: number;
+  scheduled_date: string;
+  scheduled_start_time: string | null;
+  scheduled_end_time: string | null;
+}
 
 export default function ProgramDetail() {
   const { id } = useParams();
@@ -22,16 +45,19 @@ export default function ProgramDetail() {
   const canEdit = hasRole('admin', 'committee', 'program_manager');
 
   const [program, setProgram] = useState<Program | null>(null);
-  const [programMembers, setProgramMembers] = useState<
-    { member: Member; role?: string }[]
-  >([]);
+  const [programMembers, setProgramMembers] = useState<ProgramMemberData[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddMember, setShowAddMember] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
-  const [memberRole, setMemberRole] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+
+  // Attendance matrix data
+  const [rehearsals, setRehearsals] = useState<RehearsalData[]>([]);
+  const [attendanceMatrix, setAttendanceMatrix] = useState<
+    Record<number, Record<number, AttendanceData | null>>
+  >({});
 
   useEffect(() => {
     fetchData();
@@ -41,14 +67,18 @@ export default function ProgramDetail() {
     setIsLoading(true);
     setError('');
     try {
-      const [programData, membersData] = await Promise.all([
+      const [programData, membersData, matrixData] = await Promise.all([
         programsApi.get(Number(id), { include_members: true, include_rehearsals: true }),
         programsApi.getMembers(Number(id)),
+        programsApi.getAttendanceMatrix(Number(id)),
       ]);
       setProgram(programData);
       setProgramMembers(membersData);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '加载失败');
+      setRehearsals(matrixData.rehearsals);
+      setAttendanceMatrix(matrixData.matrix);
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || '加载失败');
     } finally {
       setIsLoading(false);
     }
@@ -57,10 +87,9 @@ export default function ProgramDetail() {
   const fetchAllMembers = async () => {
     try {
       const members = await membersApi.list({ status: 'active' });
-      // Filter out members already in the program
       const existingIds = new Set(programMembers.map((pm) => pm.member.id));
       setAllMembers(members.filter((m) => !existingIds.has(m.id)));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to fetch members:', err);
     }
   };
@@ -69,7 +98,6 @@ export default function ProgramDetail() {
     await fetchAllMembers();
     setShowAddMember(true);
     setSelectedMemberId(null);
-    setMemberRole('');
   };
 
   const handleAddMember = async () => {
@@ -77,13 +105,13 @@ export default function ProgramDetail() {
 
     setIsAdding(true);
     try {
-      await programsApi.addMember(Number(id), selectedMemberId, memberRole || undefined);
+      await programsApi.addMember(Number(id), selectedMemberId);
       await fetchData();
       setShowAddMember(false);
       setSelectedMemberId(null);
-      setMemberRole('');
-    } catch (err: any) {
-      setError(err.response?.data?.error || '添加成员失败');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || '添加成员失败');
     } finally {
       setIsAdding(false);
     }
@@ -95,8 +123,19 @@ export default function ProgramDetail() {
     try {
       await programsApi.removeMember(Number(id), memberId);
       setProgramMembers(programMembers.filter((pm) => pm.member.id !== memberId));
-    } catch (err: any) {
-      setError(err.response?.data?.error || '移除成员失败');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || '移除成员失败');
+    }
+  };
+
+  const handleToggleLeader = async (memberId: number, currentIsLeader: boolean) => {
+    try {
+      await programsApi.setMemberLeader(Number(id), memberId, !currentIsLeader);
+      await fetchData();
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || '设置负责人失败');
     }
   };
 
@@ -128,6 +167,80 @@ export default function ProgramDetail() {
       default:
         return null;
     }
+  };
+
+  // 根据考勤数据获取每个段的样式
+  const getSegmentStyle = (
+    isPresent: boolean,
+    hasLeave: boolean,
+    leaveType: string | null,
+    segment: 'before' | 'middle' | 'after'
+  ) => {
+    const label = segment === 'before' ? '签到' : segment === 'after' ? '签退' : '中间';
+
+    if (isPresent) {
+      return { colorClass: 'bg-green-500', tooltip: `${label}出勤` };
+    }
+    if (hasLeave && leaveType) {
+      return { colorClass: 'bg-blue-500', tooltip: `${label}请假` };
+    }
+    return { colorClass: 'bg-orange-500', tooltip: `${label}缺勤` };
+  };
+
+  // 渲染三段式考勤状态
+  const renderAttendanceSquares = (att: AttendanceData | null) => {
+    if (att === null) {
+      // 成员当时不在节目中
+      return (
+        <div className="inline-flex items-center justify-center w-10" title="不在节目中">
+          <span className="text-gray-300">—</span>
+        </div>
+      );
+    }
+
+    let beforePresent = att.detected_before;
+    let afterPresent = att.detected_after;
+    let middlePresent = beforePresent || afterPresent;
+
+    // 根据状态推断
+    if (att.status === 'normal') {
+      beforePresent = true;
+      afterPresent = true;
+      middlePresent = true;
+    } else if (att.status === 'late') {
+      beforePresent = false;
+      afterPresent = true;
+      middlePresent = true;
+    } else if (att.status === 'early_leave') {
+      beforePresent = true;
+      afterPresent = false;
+      middlePresent = true;
+    } else if (att.status === 'absent') {
+      beforePresent = false;
+      afterPresent = false;
+      middlePresent = false;
+    }
+
+    const beforeStyle = getSegmentStyle(beforePresent, att.has_leave, att.leave_type, 'before');
+    const middleStyle = getSegmentStyle(middlePresent, att.has_leave, att.leave_type, 'middle');
+    const afterStyle = getSegmentStyle(afterPresent, att.has_leave, att.leave_type, 'after');
+
+    return (
+      <div
+        className="inline-flex items-center"
+        title={`${beforeStyle.tooltip} | ${middleStyle.tooltip} | ${afterStyle.tooltip}`}
+      >
+        <div className={`w-1.5 h-4 rounded-l-sm ${beforeStyle.colorClass}`} />
+        <div className={`w-4 h-4 ${middleStyle.colorClass}`} />
+        <div className={`w-1.5 h-4 rounded-r-sm ${afterStyle.colorClass}`} />
+      </div>
+    );
+  };
+
+  // 格式化排练日期显示
+  const formatRehearsalDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
   };
 
   if (isLoading) {
@@ -241,17 +354,37 @@ export default function ProgramDetail() {
         </div>
       )}
 
-      {/* Members */}
+      {/* Attendance Matrix */}
       <div className="card">
         <div className="card-body">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">节目成员</h3>
+            <h3 className="text-lg font-medium text-gray-900">成员考勤</h3>
             {canEdit && (
               <button onClick={handleOpenAddMember} className="btn-primary">
                 <UserPlus className="w-4 h-4 mr-2" />
                 添加成员
               </button>
             )}
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600">
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 bg-green-500 rounded-sm"></div>
+              <span>出勤</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 bg-orange-500 rounded-sm"></div>
+              <span>缺勤</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
+              <span>请假</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <span className="text-gray-300">—</span>
+              <span>不在节目</span>
+            </div>
           </div>
 
           {programMembers.length === 0 ? (
@@ -261,53 +394,77 @@ export default function ProgramDetail() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
                       姓名
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      学号
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      角色
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      院系
-                    </th>
+                    {rehearsals.map((r) => (
+                      <th
+                        key={r.id}
+                        className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        <Link
+                          to={`/admin/rehearsals/${r.id}`}
+                          className="hover:text-primary-600"
+                        >
+                          {formatRehearsalDate(r.scheduled_date)}
+                        </Link>
+                      </th>
+                    ))}
                     {canEdit && (
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         操作
                       </th>
                     )}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {programMembers.map(({ member, role }) => (
+                  {programMembers.map(({ member, is_leader }) => (
                     <tr key={member.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Link
-                          to={`/admin/members/${member.id}/edit`}
-                          className="text-primary-600 hover:text-primary-700 font-medium"
-                        >
-                          {member.name}
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {member.student_id || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {role || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {member.department || '-'}
-                      </td>
-                      {canEdit && (
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                          <button
-                            onClick={() => handleRemoveMember(member.id)}
-                            className="text-red-600 hover:text-red-800"
+                      <td className="px-4 py-3 whitespace-nowrap sticky left-0 bg-white z-10">
+                        <div className="flex items-center space-x-2">
+                          {is_leader && (
+                            <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                          )}
+                          <Link
+                            to={`/admin/members/${member.id}/edit`}
+                            className="text-primary-600 hover:text-primary-700 font-medium"
                           >
-                            移除
-                          </button>
+                            {member.name}
+                          </Link>
+                        </div>
+                      </td>
+                      {rehearsals.map((r) => (
+                        <td key={r.id} className="px-2 py-3 text-center">
+                          {renderAttendanceSquares(
+                            attendanceMatrix[member.id]?.[r.id] ?? null
+                          )}
+                        </td>
+                      ))}
+                      {canEdit && (
+                        <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
+                          <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => handleToggleLeader(member.id, is_leader || false)}
+                              className={`p-1 rounded ${
+                                is_leader
+                                  ? 'text-yellow-600 hover:text-yellow-800'
+                                  : 'text-gray-400 hover:text-gray-600'
+                              }`}
+                              title={is_leader ? '取消负责人' : '设为负责人'}
+                            >
+                              {is_leader ? (
+                                <StarOff className="w-4 h-4" />
+                              ) : (
+                                <Star className="w-4 h-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => handleRemoveMember(member.id)}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              移除
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -315,6 +472,10 @@ export default function ProgramDetail() {
                 </tbody>
               </table>
             </div>
+          )}
+
+          {rehearsals.length === 0 && programMembers.length > 0 && (
+            <p className="text-center text-gray-500 py-4 text-sm">暂无已完成的排练</p>
           )}
         </div>
       </div>
@@ -356,19 +517,6 @@ export default function ProgramDetail() {
                     暂无可添加的成员，所有成员已在节目中
                   </p>
                 )}
-              </div>
-              <div>
-                <label htmlFor="role" className="form-label">
-                  角色 (可选)
-                </label>
-                <input
-                  type="text"
-                  id="role"
-                  className="form-input"
-                  value={memberRole}
-                  onChange={(e) => setMemberRole(e.target.value)}
-                  placeholder="例如: 领舞、主唱"
-                />
               </div>
             </div>
             <div className="px-6 py-4 bg-gray-50 border-t flex justify-end space-x-3">

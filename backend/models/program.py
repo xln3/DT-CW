@@ -19,9 +19,12 @@ class Program(db.Model):
 
     # Relationships
     semester = db.relationship('Semester', back_populates='programs')
-    members = db.relationship('ProgramMember', back_populates='program', lazy='dynamic')
-    rehearsals = db.relationship('Rehearsal', back_populates='program', lazy='dynamic')
-    managers = db.relationship('UserProgram', backref='program', lazy='dynamic')
+    members = db.relationship('ProgramMember', back_populates='program', lazy='dynamic',
+                              cascade='all, delete-orphan')
+    rehearsals = db.relationship('Rehearsal', back_populates='program', lazy='dynamic',
+                                 cascade='all, delete-orphan')
+    managers = db.relationship('UserProgram', backref='program', lazy='dynamic',
+                               cascade='all, delete-orphan')
 
     # Category constants
     CATEGORY_DANCE = 'dance'
@@ -101,7 +104,8 @@ class ProgramMember(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     program_id = db.Column(db.Integer, db.ForeignKey('programs.id'), nullable=False)
     member_id = db.Column(db.Integer, db.ForeignKey('members.id'), nullable=False)
-    role = db.Column(db.String(50))  # lead/ensemble/substitute
+    role = db.Column(db.String(50))  # lead/ensemble/substitute (deprecated, kept for compatibility)
+    is_leader = db.Column(db.Boolean, default=False)  # Program leader flag
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     left_at = db.Column(db.DateTime)
     status = db.Column(db.String(20), default='active')  # active/left
@@ -132,6 +136,7 @@ class ProgramMember(db.Model):
             'member_id': self.member_id,
             'member': self.member.to_dict() if self.member else None,
             'role': self.role,
+            'is_leader': self.is_leader or False,
             'joined_at': self.joined_at.isoformat() if self.joined_at else None,
             'left_at': self.left_at.isoformat() if self.left_at else None,
             'status': self.status,
