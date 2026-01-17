@@ -54,6 +54,11 @@ class Rehearsal(db.Model):
     STATUS_COMPLETED = 'completed'
     STATUS_CANCELLED = 'cancelled'
 
+    # Rehearsal status constants
+    STATUS_SCHEDULED = 'scheduled'
+    STATUS_COMPLETED = 'completed'
+    STATUS_CANCELLED = 'cancelled'
+
     PHOTO_STATUS_PENDING = 'pending'
     PHOTO_STATUS_UPLOADED = 'uploaded'
     PHOTO_STATUS_PROCESSED = 'processed'

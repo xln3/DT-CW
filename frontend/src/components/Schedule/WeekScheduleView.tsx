@@ -135,6 +135,11 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
   }, [data.week_start, data.week_end]);
 
   const timeRange = useMemo(() => {
+    // In fixed mode, use 8:00-22:30 (8*60=480 to 22.5*60=1350)
+    if (fixedMode) {
+      return { start: 8 * 60, end: 22 * 60 + 30 };
+    }
+
     let minTime = 24 * 60;
     let maxTime = 0;
 
@@ -156,7 +161,7 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
     const paddedEnd = Math.min(24 * 60, Math.ceil(maxTime / 60) * 60);
 
     return { start: paddedStart, end: paddedEnd };
-  }, [data.schedule]);
+  }, [data.schedule, fixedMode]);
 
   const timeSlots = useMemo(() => {
     const slots: string[] = [];

@@ -259,7 +259,7 @@ def program_attendance(program_id):
 
 @public_attendance_bp.route('/overview/matrix', methods=['GET'])
 def attendance_overview_matrix():
-    """Get attendance matrix for all programs (programs × dates)."""
+    """Get attendance matrix for all programs (programs x dates)."""
     semester_id = request.args.get('semester_id', type=int)
 
     if not semester_id:
@@ -350,7 +350,7 @@ def attendance_overview_matrix():
 
 @public_attendance_bp.route('/programs/<int:program_id>/matrix', methods=['GET'])
 def program_attendance_matrix(program_id):
-    """Get attendance matrix for a program (members × rehearsals)."""
+    """Get attendance matrix for a program (members x rehearsals)."""
     from pypinyin import lazy_pinyin
 
     program = Program.query.get_or_404(program_id)

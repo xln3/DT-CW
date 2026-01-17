@@ -23,6 +23,9 @@ export function ScheduleLegend({ programs, onProgramClick }: ScheduleLegendProps
             style={{ backgroundColor: program.display_color }}
           />
           <span className="text-[10px] sm:text-sm font-medium text-gray-700 whitespace-nowrap">{program.name}</span>
+          {program.category && (
+            <span className="text-[9px] sm:text-xs text-gray-400 hidden sm:inline">({program.category})</span>
+          )}
         </button>
       ))}
     </div>

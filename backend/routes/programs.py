@@ -623,6 +623,7 @@ def import_programs_csv():
         return jsonify({'error': f'导入失败: {str(e)}'}), 500
 
 
+
 def _sync_member_attendance(program_id, member_id):
     """Create attendance records for a member for all existing rehearsals of the program."""
     rehearsals = Rehearsal.query.filter_by(program_id=program_id).all()
