@@ -498,7 +498,6 @@ def import_rehearsals_csv():
 
 
 @rehearsals_bp.route('/import-template', methods=['GET'])
-@login_required
 def get_import_template():
     """Download CSV import template."""
     import io
