@@ -31,6 +31,7 @@ import type {
   SemesterType,
   WeekScheduleData,
   ScheduleEvent,
+  RecognitionResult,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -998,5 +999,107 @@ export const expensesApi = {
 
   delete: async (id: number) => {
     await api.delete(`/admin/budget/expenses/${id}`);
+  },
+};
+
+// Face Recognition API response types (matches backend)
+interface RecognizePhotoResponse {
+  success: boolean;
+  recognition_id: number;
+  program_id: number;
+  total_faces: number;
+  matched_count: number;
+  uncertain_count: number;
+  unmatched_count: number;
+  faces: {
+    face_id: number;
+    face_crop_url: string;
+    match_status: string;
+    matched_member_id: number | null;
+    matched_member_name: string | null;
+    confidence: number | null;
+    top_candidates?: { member_id: number; name: string; confidence: number }[];
+  }[];
+  attendance_summary: {
+    detected: number[];
+    not_detected: number[];
+    total_members: number;
+  };
+  timing?: {
+    detection_ms: number;
+    matching_ms: number;
+    total_ms: number;
+  };
+  message?: string;
+}
+
+export const faceRecognitionApi = {
+  // Upload and recognize group photo
+  recognizePhoto: async (
+    file: File,
+    rehearsalId: number,
+    programId: number,
+    photoType: 'check_in' | 'check_out'
+  ) => {
+    const formData = new FormData();
+    formData.append('photo', file);
+    formData.append('rehearsal_id', rehearsalId.toString());
+    formData.append('program_id', programId.toString());
+    formData.append('photo_type', photoType);
+    const response = await api.post<RecognizePhotoResponse>('/face/recognize', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  // Get recognition result
+  getRecognitionResult: async (recognitionId: number) => {
+    const response = await api.get<RecognitionResult>(`/face/recognition/${recognitionId}`);
+    return response.data;
+  },
+
+  // Annotate a detected face
+  annotateFace: async (
+    detectedFaceId: number,
+    memberId: number | null,
+    feedbackType: 'correct' | 'wrong' | 'not_in_photo' = 'correct'
+  ) => {
+    const response = await api.post<{
+      success: boolean;
+      message: string;
+    }>('/face/annotate', {
+      detected_face_id: detectedFaceId,
+      member_id: memberId,
+      feedback_type: feedbackType,
+    });
+    return response.data;
+  },
+
+  // Get members face registration status
+  getMembersStatus: async (programId?: number) => {
+    const response = await api.get<{
+      total: number;
+      members: {
+        member_id: number;
+        name: string;
+        status: string;
+        photo_count: number;
+        distinguishability_score: number | null;
+        registered_at: string | null;
+      }[];
+    }>('/face/members-status', { params: { program_id: programId } });
+    return response.data;
+  },
+
+  // Get face recognition stats
+  getStats: async () => {
+    const response = await api.get<{
+      registration: Record<string, number>;
+      recognition: {
+        total_photos: number;
+        avg_match_rate: number;
+      };
+    }>('/face/stats/overview');
+    return response.data;
   },
 };

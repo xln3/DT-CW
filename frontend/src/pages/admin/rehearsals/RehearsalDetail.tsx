@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -11,11 +11,47 @@ import {
   Check,
   X,
   FileText,
+  Upload,
+  Camera,
+  Loader2,
+  Image as ImageIcon,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
-import { rehearsalsApi } from '../../../services/api';
+import { rehearsalsApi, faceRecognitionApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
-import type { Rehearsal, Attendance, AttendanceStatus } from '../../../types';
-import { ATTENDANCE_STATUS_DISPLAY } from '../../../types';
+import type { Rehearsal, Attendance, AttendanceStatus, FaceMatchStatus } from '../../../types';
+import { ATTENDANCE_STATUS_DISPLAY, MATCH_STATUS_DISPLAY } from '../../../types';
+
+type PhotoType = 'check_in' | 'check_out';
+
+// Match backend response format
+interface RecognitionData {
+  recognition_id: number;
+  total_faces: number;
+  matched_count: number;
+  uncertain_count: number;
+  unmatched_count: number;
+  photo_url?: string;
+}
+
+interface DetectedFaceData {
+  face_id: number;
+  face_crop_url: string;
+  match_status: FaceMatchStatus;
+  matched_member_id: number | null;
+  matched_member_name: string | null;
+  confidence: number | null;
+  annotated_member_id?: number;
+  annotated_member_name?: string;
+}
+
+interface RecognitionState {
+  isUploading: boolean;
+  recognition: RecognitionData | null;
+  faces: DetectedFaceData[];
+  error: string | null;
+}
 
 export default function RehearsalDetail() {
   const { id } = useParams();
@@ -34,6 +70,28 @@ export default function RehearsalDetail() {
     leave_reason: '',
   });
 
+  // Face recognition state
+  const [checkInRecognition, setCheckInRecognition] = useState<RecognitionState>({
+    isUploading: false,
+    recognition: null,
+    faces: [],
+    error: null,
+  });
+  const [checkOutRecognition, setCheckOutRecognition] = useState<RecognitionState>({
+    isUploading: false,
+    recognition: null,
+    faces: [],
+    error: null,
+  });
+  const [activeAnnotation, setActiveAnnotation] = useState<{
+    photoType: PhotoType;
+    face: DetectedFaceData;
+  } | null>(null);
+  const [programMembers, setProgramMembers] = useState<{ id: number; name: string }[]>([]);
+
+  const checkInInputRef = useRef<HTMLInputElement>(null);
+  const checkOutInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     fetchData();
   }, [id]);
@@ -48,6 +106,12 @@ export default function RehearsalDetail() {
       ]);
       setRehearsal(rehearsalData);
       setAttendance(attendanceData);
+
+      // Extract program members from attendance
+      setProgramMembers(attendanceData.map(a => ({
+        id: a.member_id,
+        name: a.member_name || `Member ${a.member_id}`,
+      })));
     } catch (err: any) {
       setError(err.response?.data?.error || '加载失败');
     } finally {
@@ -80,6 +144,111 @@ export default function RehearsalDetail() {
     });
   };
 
+  const handlePhotoUpload = async (file: File, photoType: PhotoType) => {
+    if (!rehearsal) return;
+
+    const setState = photoType === 'check_in' ? setCheckInRecognition : setCheckOutRecognition;
+
+    setState(prev => ({ ...prev, isUploading: true, error: null }));
+
+    try {
+      const result = await faceRecognitionApi.recognizePhoto(
+        file,
+        rehearsal.id,
+        rehearsal.program_id,
+        photoType
+      );
+
+      console.log('Recognition result:', result);
+
+      // Transform backend response to match our state format
+      const recognition: RecognitionData = {
+        recognition_id: result.recognition_id,
+        total_faces: result.total_faces,
+        matched_count: result.matched_count,
+        uncertain_count: result.uncertain_count,
+        unmatched_count: result.unmatched_count,
+      };
+
+      const faces: DetectedFaceData[] = (result.faces || []).map(f => ({
+        face_id: f.face_id,
+        face_crop_url: f.face_crop_url,
+        match_status: f.match_status as FaceMatchStatus,
+        matched_member_id: f.matched_member_id,
+        matched_member_name: f.matched_member_name,
+        confidence: f.confidence,
+      }));
+
+      setState({
+        isUploading: false,
+        recognition,
+        faces,
+        error: null,
+      });
+
+      // Refresh attendance to reflect detection updates
+      const updatedAttendance = await rehearsalsApi.getAttendance(Number(id));
+      setAttendance(updatedAttendance);
+    } catch (err: any) {
+      console.error('Recognition error:', err);
+      const errorMsg = err.response?.data?.error
+        || err.response?.data?.message
+        || err.message
+        || '识别失败';
+      setState(prev => ({
+        ...prev,
+        isUploading: false,
+        error: errorMsg,
+      }));
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, photoType: PhotoType) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handlePhotoUpload(file, photoType);
+    }
+    // Reset input so same file can be selected again
+    e.target.value = '';
+  };
+
+  const handleAnnotate = async (face: DetectedFaceData, memberId: number | null) => {
+    if (!activeAnnotation) return;
+
+    const setState = activeAnnotation.photoType === 'check_in'
+      ? setCheckInRecognition
+      : setCheckOutRecognition;
+
+    try {
+      await faceRecognitionApi.annotateFace(face.face_id, memberId, 'correct');
+
+      // Update local state
+      setState(prev => ({
+        ...prev,
+        faces: prev.faces.map(f =>
+          f.face_id === face.face_id
+            ? {
+                ...f,
+                annotated_member_id: memberId ?? undefined,
+                annotated_member_name: memberId
+                  ? programMembers.find(m => m.id === memberId)?.name
+                  : undefined,
+                match_status: 'manual' as FaceMatchStatus,
+              }
+            : f
+        ),
+      }));
+
+      setActiveAnnotation(null);
+
+      // Refresh attendance
+      const updatedAttendance = await rehearsalsApi.getAttendance(Number(id));
+      setAttendance(updatedAttendance);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '标注失败');
+    }
+  };
+
   const getStatusBadge = (status: AttendanceStatus) => {
     const colors: Record<string, string> = {
       normal: 'bg-green-100 text-green-800',
@@ -104,6 +273,21 @@ export default function RehearsalDetail() {
       <Check className="w-4 h-4 text-green-600" />
     ) : (
       <X className="w-4 h-4 text-red-600" />
+    );
+  };
+
+  const getMatchStatusBadge = (status: FaceMatchStatus) => {
+    const colors: Record<string, string> = {
+      confirmed: 'bg-green-100 text-green-800',
+      uncertain: 'bg-yellow-100 text-yellow-800',
+      unmatched: 'bg-red-100 text-red-800',
+      manual: 'bg-blue-100 text-blue-800',
+      self_annotated: 'bg-purple-100 text-purple-800',
+    };
+    return (
+      <span className={`px-2 py-0.5 text-xs rounded ${colors[status]}`}>
+        {MATCH_STATUS_DISPLAY[status]}
+      </span>
     );
   };
 
@@ -137,6 +321,165 @@ export default function RehearsalDetail() {
       ['absent', 'early_leave', 'leave_absent', 'leave_early'].includes(a.status)
     ).length,
     leave: attendance.filter((a) => a.has_leave).length,
+  };
+
+  const renderPhotoUploadSection = (
+    photoType: PhotoType,
+    label: string,
+    recognitionState: RecognitionState,
+    inputRef: React.RefObject<HTMLInputElement | null>
+  ) => {
+    const { isUploading, recognition, faces, error: recognitionError } = recognitionState;
+
+    return (
+      <div className="border rounded-lg p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-medium text-gray-900 flex items-center">
+            <Camera className="w-5 h-5 mr-2 text-gray-500" />
+            {label}合照
+          </h4>
+          {canEdit && (
+            <button
+              onClick={() => inputRef.current?.click()}
+              disabled={isUploading}
+              className="btn-secondary text-sm py-1.5 px-3 flex items-center"
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                  识别中...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-1.5" />
+                  上传并识别
+                </>
+              )}
+            </button>
+          )}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handleFileSelect(e, photoType)}
+          />
+        </div>
+
+        {recognitionError && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4 flex items-start">
+            <AlertCircle className="h-4 w-4 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
+            <span className="text-sm text-red-700">{recognitionError}</span>
+          </div>
+        )}
+
+        {recognition && (
+          <div className="space-y-4">
+            {/* Recognition Stats */}
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="bg-gray-50 rounded p-2">
+                <p className="text-lg font-semibold">{recognition.total_faces}</p>
+                <p className="text-xs text-gray-500">检测人脸</p>
+              </div>
+              <div className="bg-green-50 rounded p-2">
+                <p className="text-lg font-semibold text-green-600">{recognition.matched_count}</p>
+                <p className="text-xs text-gray-500">已匹配</p>
+              </div>
+              <div className="bg-yellow-50 rounded p-2">
+                <p className="text-lg font-semibold text-yellow-600">{recognition.uncertain_count}</p>
+                <p className="text-xs text-gray-500">待确认</p>
+              </div>
+              <div className="bg-red-50 rounded p-2">
+                <p className="text-lg font-semibold text-red-600">{recognition.unmatched_count}</p>
+                <p className="text-xs text-gray-500">未识别</p>
+              </div>
+            </div>
+
+            {/* Photo Preview */}
+            {recognition.photo_url && (
+              <div className="relative">
+                <img
+                  src={recognition.photo_url}
+                  alt={`${label}合照`}
+                  className="w-full rounded-lg max-h-64 object-contain bg-gray-100"
+                />
+              </div>
+            )}
+
+            {/* Detected Faces */}
+            {faces.length > 0 && (
+              <div>
+                <h5 className="text-sm font-medium text-gray-700 mb-2">检测到的人脸</h5>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {faces.map((face) => (
+                    <div
+                      key={face.face_id}
+                      className={`relative border rounded-lg p-2 ${
+                        face.match_status === 'uncertain' || face.match_status === 'unmatched'
+                          ? 'border-yellow-300 bg-yellow-50'
+                          : 'border-gray-200'
+                      }`}
+                    >
+                      {face.face_crop_url ? (
+                        <img
+                          src={face.face_crop_url}
+                          alt="人脸"
+                          className="w-full aspect-square object-cover rounded"
+                        />
+                      ) : (
+                        <div className="w-full aspect-square bg-gray-200 rounded flex items-center justify-center">
+                          <Users className="w-8 h-8 text-gray-400" />
+                        </div>
+                      )}
+
+                      <div className="mt-2 space-y-1">
+                        {getMatchStatusBadge(face.match_status)}
+
+                        {face.match_status === 'confirmed' || face.match_status === 'manual' ? (
+                          <p className="text-sm font-medium truncate">
+                            {face.annotated_member_name || face.matched_member_name || '已识别'}
+                          </p>
+                        ) : face.match_status === 'uncertain' ? (
+                          <p className="text-sm text-yellow-700 truncate">
+                            可能是: {face.matched_member_name}
+                            {face.confidence && (
+                              <span className="text-xs ml-1">
+                                ({Math.round(face.confidence * 100)}%)
+                              </span>
+                            )}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-gray-500">未识别</p>
+                        )}
+
+                        {canEdit && (face.match_status === 'uncertain' || face.match_status === 'unmatched') && (
+                          <button
+                            onClick={() => setActiveAnnotation({ photoType, face })}
+                            className="w-full mt-1 text-xs py-1 px-2 bg-primary-100 text-primary-700 rounded hover:bg-primary-200"
+                          >
+                            手动标注
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!recognition && !isUploading && (
+          <div className="text-center py-8 text-gray-500">
+            <ImageIcon className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+            <p>尚未上传{label}合照</p>
+            {canEdit && (
+              <p className="text-sm mt-1">点击上方按钮上传照片并进行人脸识别</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -231,6 +574,20 @@ export default function RehearsalDetail() {
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Face Recognition Section */}
+      <div className="card">
+        <div className="card-body">
+          <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+            <Camera className="w-5 h-5 mr-2" />
+            人脸识别考勤
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {renderPhotoUploadSection('check_in', '课前', checkInRecognition, checkInInputRef)}
+            {renderPhotoUploadSection('check_out', '课后', checkOutRecognition, checkOutInputRef)}
           </div>
         </div>
       </div>
@@ -436,6 +793,65 @@ export default function RehearsalDetail() {
           )}
         </div>
       </div>
+
+      {/* Annotation Modal */}
+      {activeAnnotation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="p-4 border-b">
+              <h3 className="text-lg font-medium">手动标注人脸</h3>
+              <p className="text-sm text-gray-500 mt-1">请选择这个人脸对应的成员</p>
+            </div>
+
+            <div className="p-4">
+              {/* Face preview */}
+              <div className="flex justify-center mb-4">
+                {activeAnnotation.face.face_crop_url ? (
+                  <img
+                    src={activeAnnotation.face.face_crop_url}
+                    alt="待标注人脸"
+                    className="w-24 h-24 object-cover rounded-lg border"
+                  />
+                ) : (
+                  <div className="w-24 h-24 bg-gray-200 rounded-lg flex items-center justify-center">
+                    <Users className="w-8 h-8 text-gray-400" />
+                  </div>
+                )}
+              </div>
+
+              {/* Member selection */}
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {programMembers.map((member) => (
+                  <button
+                    key={member.id}
+                    onClick={() => handleAnnotate(activeAnnotation.face, member.id)}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded flex items-center"
+                  >
+                    <UserCheck className="w-4 h-4 mr-2 text-gray-400" />
+                    {member.name}
+                  </button>
+                ))}
+                <button
+                  onClick={() => handleAnnotate(activeAnnotation.face, null)}
+                  className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 rounded flex items-center"
+                >
+                  <UserX className="w-4 h-4 mr-2" />
+                  不是节目成员
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 border-t bg-gray-50">
+              <button
+                onClick={() => setActiveAnnotation(null)}
+                className="w-full btn-secondary"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

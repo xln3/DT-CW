@@ -1,6 +1,6 @@
 """Main Flask application."""
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 
 from config import config
@@ -15,6 +15,11 @@ def create_app(config_name=None):
 
     app = Flask(__name__)
     app.config.from_object(config[config_name])
+
+    # Configure upload folder
+    upload_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+    os.makedirs(upload_folder, exist_ok=True)
+    app.config['UPLOAD_FOLDER'] = upload_folder
 
     # Initialize extensions
     db.init_app(app)
@@ -57,6 +62,11 @@ def create_app(config_name=None):
     @app.route('/api/health')
     def health_check():
         return jsonify({'status': 'ok', 'message': '艺术团管理系统运行中'})
+
+    # Serve uploaded files
+    @app.route('/uploads/<path:filename>')
+    def serve_upload(filename):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
     # Error handlers
     @app.errorhandler(404)

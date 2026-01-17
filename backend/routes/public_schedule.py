@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 
 from database import db
-from models import Program, Rehearsal, Semester
+from models import Program, Rehearsal, Semester, CalendarEvent, EventType
 
 public_schedule_bp = Blueprint('public_schedule', __name__)
 
@@ -74,6 +74,13 @@ def week_schedule():
         Rehearsal.scheduled_date <= week_end
     ).order_by(Rehearsal.scheduled_date, Rehearsal.scheduled_start_time).all()
 
+    # Get calendar events in this date range
+    calendar_events = CalendarEvent.query.filter(
+        CalendarEvent.start_date >= start_date,
+        CalendarEvent.start_date <= week_end,
+        CalendarEvent.status == 'active'
+    ).order_by(CalendarEvent.start_date, CalendarEvent.start_time).all()
+
     # Group by date
     schedule = {}
     current = start_date
@@ -81,6 +88,7 @@ def week_schedule():
         schedule[current.isoformat()] = []
         current += timedelta(days=1)
 
+    # Add rehearsals to schedule
     for r in rehearsals:
         date_key = r.scheduled_date.isoformat()
         if date_key in schedule:
@@ -93,6 +101,30 @@ def week_schedule():
                 'end_time': r.scheduled_end_time.isoformat() if r.scheduled_end_time else None,
                 'location': r.location,
                 'teacher_name': r.teacher.name if r.teacher else None
+            })
+
+    # Add calendar events to schedule
+    for ce in calendar_events:
+        date_key = ce.start_date.isoformat()
+        if date_key in schedule:
+            # Determine color based on event type
+            event_color = '#6B7280'  # Default gray
+            if ce.event_type:
+                event_color = ce.event_type.color or '#6B7280'
+            elif ce.program:
+                event_color = ce.program.display_color or '#3498DB'
+
+            schedule[date_key].append({
+                'id': ce.id + 100000,  # Offset to avoid ID collision with rehearsals
+                'title': ce.title,
+                'program_id': ce.program_id,
+                'program_name': ce.program.name if ce.program else None,
+                'program_color': event_color,
+                'start_time': ce.start_time.isoformat() if ce.start_time else None,
+                'end_time': ce.end_time.isoformat() if ce.end_time else None,
+                'location': ce.location,
+                'is_all_day': ce.is_all_day,
+                'event_type': ce.event_type.to_dict() if ce.event_type else None
             })
 
     return jsonify({

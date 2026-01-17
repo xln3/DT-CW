@@ -38,6 +38,86 @@ function addDays(dateStr: string, days: number): string {
   return date.toISOString().split('T')[0];
 }
 
+interface EventWithLayout extends ScheduleEvent {
+  column: number;
+  totalColumns: number;
+}
+
+interface SeparatedEvents {
+  timedEvents: EventWithLayout[];
+  allDayEvents: ScheduleEvent[];
+}
+
+function calculateEventLayout(events: ScheduleEvent[]): SeparatedEvents {
+  if (events.length === 0) return { timedEvents: [], allDayEvents: [] };
+
+  // Separate all-day events from timed events
+  const allDayEvents: ScheduleEvent[] = [];
+  const timedEventsRaw: ScheduleEvent[] = [];
+
+  for (const event of events) {
+    if (event.is_all_day || (!event.start_time && !event.end_time)) {
+      allDayEvents.push(event);
+    } else {
+      timedEventsRaw.push(event);
+    }
+  }
+
+  // Sort timed events by start time, then by duration (longer first for better layout)
+  const sorted = [...timedEventsRaw].sort((a, b) => {
+    const startA = parseTime(a.start_time);
+    const startB = parseTime(b.start_time);
+    if (startA !== startB) return startA - startB;
+    const durationA = parseTime(a.end_time) - startA;
+    const durationB = parseTime(b.end_time) - startB;
+    return durationB - durationA;
+  });
+
+  const result: EventWithLayout[] = [];
+  const columns: { endTime: number }[] = [];
+
+  for (const event of sorted) {
+    const startMin = parseTime(event.start_time);
+    const endMin = parseTime(event.end_time);
+
+    // Find a column where this event fits (no overlap)
+    let columnIndex = columns.findIndex(col => col.endTime <= startMin);
+    if (columnIndex === -1) {
+      columnIndex = columns.length;
+      columns.push({ endTime: endMin });
+    } else {
+      columns[columnIndex].endTime = endMin;
+    }
+
+    result.push({
+      ...event,
+      column: columnIndex,
+      totalColumns: 0, // Will be calculated later
+    });
+  }
+
+  // Calculate total columns for each event based on overlapping events
+  for (const event of result) {
+    const startMin = parseTime(event.start_time);
+    const endMin = parseTime(event.end_time);
+
+    // Find all events that overlap with this one
+    const overlapping = result.filter(e => {
+      const eStart = parseTime(e.start_time);
+      const eEnd = parseTime(e.end_time);
+      return !(eEnd <= startMin || eStart >= endMin);
+    });
+
+    // Total columns is the max column index + 1 among overlapping events
+    const maxCol = Math.max(...overlapping.map(e => e.column));
+    for (const e of overlapping) {
+      e.totalColumns = Math.max(e.totalColumns, maxCol + 1);
+    }
+  }
+
+  return { timedEvents: result, allDayEvents };
+}
+
 export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode = false }: WeekScheduleViewProps) {
   const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
 
@@ -53,11 +133,6 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
   }, [data.week_start, data.week_end]);
 
   const timeRange = useMemo(() => {
-    // In fixed mode, use 8:00-22:30 (8*60=480 to 22.5*60=1350)
-    if (fixedMode) {
-      return { start: 8 * 60, end: 22 * 60 + 30 };
-    }
-
     let minTime = 24 * 60;
     let maxTime = 0;
 
@@ -74,11 +149,12 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
       return { start: 8 * 60, end: 20 * 60 };
     }
 
-    const paddedStart = Math.max(0, Math.floor(minTime / 60) * 60 - 60);
-    const paddedEnd = Math.min(24 * 60, Math.ceil(maxTime / 60) * 60 + 60);
+    // Round to hour boundaries
+    const paddedStart = Math.max(0, Math.floor(minTime / 60) * 60);
+    const paddedEnd = Math.min(24 * 60, Math.ceil(maxTime / 60) * 60);
 
     return { start: paddedStart, end: paddedEnd };
-  }, [data.schedule, fixedMode]);
+  }, [data.schedule]);
 
   const timeSlots = useMemo(() => {
     const slots: string[] = [];
@@ -102,46 +178,76 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
     onEventClick?.(event);
   };
 
-  const renderEvent = (event: ScheduleEvent) => {
+  // Calculate pixel height per minute for proper scaling
+  const totalMinutes = timeRange.end - timeRange.start;
+  // Use compact scaling: 48px per hour (0.8px per minute) for fixedMode
+  const pixelsPerMinute = fixedMode ? 0.8 : 1;
+  const gridHeight = totalMinutes * pixelsPerMinute;
+  const hourHeight = 60 * pixelsPerMinute;
+
+  const renderEvent = (event: EventWithLayout) => {
     const startMin = parseTime(event.start_time);
     const endMin = parseTime(event.end_time);
     const duration = endMin - startMin;
 
-    const top = ((startMin - timeRange.start) / (timeRange.end - timeRange.start)) * 100;
-    const height = (duration / (timeRange.end - timeRange.start)) * 100;
+    const top = ((startMin - timeRange.start) / totalMinutes) * 100;
+    const height = (duration / totalMinutes) * 100;
+    const heightPx = duration * pixelsPerMinute;
+
+    // Calculate width and left position based on columns
+    const columnWidth = 100 / event.totalColumns;
+    const left = event.column * columnWidth;
+
+    // Determine font size based on available height AND column count
+    // Height thresholds: Small < 30px, Medium 30-50px, Large > 50px
+    // Column penalty: reduce one level for 2 cols, two levels for 3+ cols
+    const getHeightLevel = () => {
+      if (heightPx < 30) return 0; // xs
+      if (heightPx < 50) return 1; // sm
+      return 2; // base
+    };
+    const columnPenalty = event.totalColumns >= 3 ? 2 : event.totalColumns >= 2 ? 1 : 0;
+    const effectiveLevel = Math.max(0, getHeightLevel() - columnPenalty);
+    const fontSizeClass = effectiveLevel === 0 ? 'text-xs' : effectiveLevel === 1 ? 'text-sm' : 'text-base';
+
+    // Determine if we have space for additional info (consider columns)
+    const showTime = heightPx >= 40 && event.totalColumns <= 2;
+    const showLocation = heightPx >= 60 && event.location && event.totalColumns === 1;
+
+    // Event type indicator (calendar event vs rehearsal)
+    const isCalendarEvent = event.event_type !== undefined;
 
     return (
       <div
-        key={event.id}
+        key={`${isCalendarEvent ? 'cal' : 'reh'}-${event.id}`}
         onClick={() => handleEventClick(event)}
-        className="absolute left-1 right-1 rounded-md overflow-hidden cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 transition-all"
+        className={`absolute rounded-md overflow-hidden cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 transition-all ${
+          isCalendarEvent ? 'border-2 border-dashed border-white/50' : ''
+        }`}
         style={{
           top: `${top}%`,
-          height: `${Math.max(height, 4)}%`,
-          backgroundColor: event.program_color,
+          height: `${Math.max(height, 3)}%`,
+          left: `calc(${left}% + 2px)`,
+          width: `calc(${columnWidth}% - 4px)`,
+          backgroundColor: event.program_color || '#6B7280',
         }}
       >
-        <div className="p-1 h-full flex flex-col text-white text-xs">
-          <span className="font-medium truncate">{event.program_name}</span>
-          {height > 8 && (
-            <>
-              <span className="text-white/80 truncate">
-                {formatTime(event.start_time)}-{formatTime(event.end_time)}
-              </span>
-              {height > 15 && event.location && (
-                <span className="text-white/70 truncate">{event.location}</span>
-              )}
-            </>
+        <div className={`px-1 h-full flex flex-col justify-center text-white ${fontSizeClass}`}>
+          <span className="font-semibold truncate leading-tight">
+            {event.title || event.program_name}
+          </span>
+          {showTime && (
+            <span className="text-white/80 truncate leading-tight">
+              {formatTime(event.start_time)}-{formatTime(event.end_time)}
+            </span>
+          )}
+          {showLocation && (
+            <span className="text-white/70 truncate leading-tight">{event.location}</span>
           )}
         </div>
       </div>
     );
   };
-
-  // Calculate pixel height per minute for proper scaling
-  const totalMinutes = timeRange.end - timeRange.start;
-  const pixelsPerMinute = fixedMode ? 1.5 : 1; // Adjust density in fixed mode
-  const gridHeight = totalMinutes * pixelsPerMinute;
 
   return (
     <div className={`flex flex-col bg-white rounded-lg shadow-sm ${fixedMode ? '' : 'h-full'}`}>
@@ -217,13 +323,18 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
 
           {/* Time Grid */}
           <div className="flex relative" style={{ height: fixedMode ? `${gridHeight}px` : `${timeSlots.length * 60}px` }}>
-            {/* Time Labels */}
-            <div className="w-14 flex-shrink-0 border-r">
-              {timeSlots.map((time) => (
+            {/* Time Labels - using absolute positioning for accurate alignment */}
+            <div className="w-14 flex-shrink-0 border-r relative">
+              {timeSlots.map((time, i) => (
                 <div
                   key={time}
-                  className="text-xs text-gray-400 text-right pr-2 -mt-2"
-                  style={{ height: fixedMode ? `${60 * pixelsPerMinute}px` : '60px' }}
+                  className="absolute text-xs text-gray-500 text-right pr-2 font-medium"
+                  style={{
+                    top: `${i * hourHeight}px`,
+                    transform: 'translateY(-50%)',
+                    right: 0,
+                    left: 0,
+                  }}
                 >
                   {time}
                 </div>
@@ -233,6 +344,7 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
             {/* Day Columns */}
             {dates.map((date) => {
               const events = data.schedule[date] || [];
+              const { timedEvents, allDayEvents } = calculateEventLayout(events);
               const isToday = date === new Date().toISOString().split('T')[0];
               return (
                 <div
@@ -246,12 +358,28 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
                     <div
                       key={i}
                       className="border-b border-gray-100"
-                      style={{ height: fixedMode ? `${60 * pixelsPerMinute}px` : '60px' }}
+                      style={{ height: `${hourHeight}px` }}
                     />
                   ))}
 
-                  {/* Events */}
-                  {events.map(renderEvent)}
+                  {/* All-day events banner at top */}
+                  {allDayEvents.length > 0 && (
+                    <div className="absolute top-0 left-0 right-0 z-10 p-1 space-y-1">
+                      {allDayEvents.map((event) => (
+                        <div
+                          key={`allday-${event.id}`}
+                          onClick={() => handleEventClick(event)}
+                          className="rounded px-2 py-0.5 text-xs text-white font-medium truncate cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 border border-dashed border-white/50"
+                          style={{ backgroundColor: event.program_color || '#6B7280' }}
+                        >
+                          {event.title || event.program_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Timed Events */}
+                  {timedEvents.map(renderEvent)}
                 </div>
               );
             })}
@@ -271,9 +399,12 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
           >
             <div
               className="p-4 text-white"
-              style={{ backgroundColor: selectedEvent.program_color }}
+              style={{ backgroundColor: selectedEvent.program_color || '#6B7280' }}
             >
-              <h3 className="text-lg font-semibold">{selectedEvent.program_name}</h3>
+              <h3 className="text-lg font-semibold">{selectedEvent.title || selectedEvent.program_name}</h3>
+              {selectedEvent.title && selectedEvent.program_name && (
+                <p className="text-white/80 text-sm">{selectedEvent.program_name}</p>
+              )}
             </div>
             <div className="p-4 space-y-3">
               {(selectedEvent.start_time || selectedEvent.end_time) && (

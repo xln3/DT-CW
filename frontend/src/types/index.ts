@@ -561,11 +561,65 @@ export const EXPENSE_STATUS_DISPLAY: Record<string, string> = {
   cancelled: '已取消',
 };
 
+// Face Recognition types
+export type FaceMatchStatus = 'confirmed' | 'uncertain' | 'unmatched' | 'manual' | 'self_annotated';
+
+export interface DetectedFace {
+  id: number;
+  recognition_id: number;
+  face_crop_url?: string;
+  bbox_x?: number;
+  bbox_y?: number;
+  bbox_width?: number;
+  bbox_height?: number;
+  matched_member_id?: number;
+  matched_member_name?: string;
+  match_confidence?: number;
+  match_status: FaceMatchStatus;
+  annotated_member_id?: number;
+  annotated_member_name?: string;
+  created_at: string;
+}
+
+export interface PhotoRecognition {
+  id: number;
+  rehearsal_id: number;
+  program_id: number;
+  photo_type: 'check_in' | 'check_out';
+  photo_url?: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  total_faces: number;
+  matched_faces: number;
+  uncertain_faces: number;
+  unmatched_faces: number;
+  processed_at?: string;
+  created_at: string;
+  faces?: DetectedFace[];
+}
+
+export interface RecognitionResult {
+  recognition: PhotoRecognition;
+  faces: DetectedFace[];
+  program_members: {
+    id: number;
+    name: string;
+    detected: boolean;
+  }[];
+}
+
+export const MATCH_STATUS_DISPLAY: Record<FaceMatchStatus, string> = {
+  confirmed: '已确认',
+  uncertain: '待确认',
+  unmatched: '未识别',
+  manual: '人工标注',
+  self_annotated: '自选',
+};
+
 // Schedule types (for week view)
 export interface ScheduleEvent {
   id: number;
-  program_id: number;
-  program_name: string;
+  program_id?: number;
+  program_name?: string;
   program_color: string;
   category?: string;
   start_time?: string;
@@ -573,6 +627,10 @@ export interface ScheduleEvent {
   location?: string;
   teacher_name?: string;
   notes?: string;
+  // Calendar event specific fields
+  title?: string;
+  event_type?: EventType;
+  is_all_day?: boolean;
 }
 
 export interface ScheduleProgramInfo {

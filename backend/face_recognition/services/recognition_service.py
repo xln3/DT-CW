@@ -392,17 +392,42 @@ class RecognitionService:
             new_attendance.calculate_status()
     
     def _save_face_crop(
-        self, 
-        face_crop_data: bytes, 
-        recognition_id: int, 
+        self,
+        face_crop_data: bytes,
+        recognition_id: int,
         face_index: int
     ) -> str:
         """
-        Save face crop image.
-        
-        In production, this should upload to cloud storage.
-        For now, returns a placeholder URL.
+        Save face crop image to disk.
+
+        Args:
+            face_crop_data: JPEG image bytes
+            recognition_id: Recognition ID for organizing files
+            face_index: Index of the face in the photo
+
+        Returns:
+            URL path to access the saved image
         """
-        # TODO: Implement actual storage
-        filename = f"face_crops/{recognition_id}/{face_index}_{uuid.uuid4().hex[:8]}.jpg"
-        return f"/uploads/{filename}"
+        from flask import current_app
+
+        if not face_crop_data or len(face_crop_data) < 100:
+            # Invalid or placeholder data (mock mode)
+            return ''
+
+        # Create directory
+        upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+        face_crop_dir = os.path.join(upload_folder, 'face_crops', str(recognition_id))
+        os.makedirs(face_crop_dir, exist_ok=True)
+
+        # Generate filename
+        filename = f"{face_index}_{uuid.uuid4().hex[:8]}.jpg"
+        filepath = os.path.join(face_crop_dir, filename)
+
+        # Save file
+        try:
+            with open(filepath, 'wb') as f:
+                f.write(face_crop_data)
+            return f"/uploads/face_crops/{recognition_id}/{filename}"
+        except Exception as e:
+            logger.error(f"Failed to save face crop: {e}")
+            return ''
