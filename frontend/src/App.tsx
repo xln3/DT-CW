@@ -10,11 +10,15 @@ import PublicLayout from './components/Layout/PublicLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/admin/Dashboard';
 import { MemberList, MemberForm } from './pages/admin/members';
-import { TeacherList, TeacherForm } from './pages/admin/teachers';
+import { TeacherList, TeacherForm, TeacherApplications, TeacherPayments } from './pages/admin/teachers';
 import { ProgramList, ProgramForm, ProgramDetail } from './pages/admin/programs';
 import { RehearsalList, RehearsalForm, RehearsalDetail } from './pages/admin/rehearsals';
+import { CalendarList } from './pages/admin/calendar';
+import { VenueList, VenueForm, VenueSchedule } from './pages/admin/venues';
+import { BudgetList } from './pages/admin/budget';
 import { SemesterList, UserList, SettingsHub } from './pages/admin/settings';
-import { Home, AttendanceOverview, ProgramAttendance, AttendanceSearch } from './pages/public';
+import { AttendanceOverview, ProgramAttendance, AttendanceSearch } from './pages/public';
+import Calendar from './pages/public/Calendar';
 
 // Query client
 const queryClient = new QueryClient({
@@ -69,7 +73,7 @@ function App() {
 
             {/* Public routes with layout */}
             <Route element={<PublicLayoutWrapper />}>
-              <Route path="/" element={<Home />} />
+              <Route path="/" element={<Calendar />} />
               <Route path="/attendance" element={<AttendanceOverview />} />
               <Route path="/attendance/programs/:id" element={<ProgramAttendance />} />
               <Route path="/attendance/search" element={<AttendanceSearch />} />
@@ -89,6 +93,8 @@ function App() {
                 <Route path="/admin/teachers" element={<TeacherList />} />
                 <Route path="/admin/teachers/new" element={<TeacherForm />} />
                 <Route path="/admin/teachers/:id/edit" element={<TeacherForm />} />
+                <Route path="/admin/teachers/applications" element={<TeacherApplications />} />
+                <Route path="/admin/teachers/payments" element={<TeacherPayments />} />
 
                 {/* Programs */}
                 <Route path="/admin/programs" element={<ProgramList />} />
@@ -101,6 +107,18 @@ function App() {
                 <Route path="/admin/rehearsals/new" element={<RehearsalForm />} />
                 <Route path="/admin/rehearsals/:id" element={<RehearsalDetail />} />
                 <Route path="/admin/rehearsals/:id/edit" element={<RehearsalForm />} />
+
+                {/* Calendar */}
+                <Route path="/admin/calendar" element={<CalendarList />} />
+
+                {/* Venues */}
+                <Route path="/admin/venues" element={<VenueList />} />
+                <Route path="/admin/venues/new" element={<VenueForm />} />
+                <Route path="/admin/venues/:id/edit" element={<VenueForm />} />
+                <Route path="/admin/venues/:id/schedule" element={<VenueSchedule />} />
+
+                {/* Budget */}
+                <Route path="/admin/budget" element={<BudgetList />} />
 
                 {/* Settings */}
                 <Route path="/admin/settings" element={<SettingsHub />} />

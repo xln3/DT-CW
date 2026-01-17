@@ -11,6 +11,8 @@ import {
   LogOut,
   ChevronDown,
   LayoutDashboard,
+  MapPin,
+  DollarSign,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import clsx from 'clsx';
@@ -43,6 +45,21 @@ const navItems: NavItem[] = [
     name: '排练管理',
     path: '/admin/rehearsals',
     icon: <Calendar className="w-5 h-5" />,
+  },
+  {
+    name: '队历管理',
+    path: '/admin/calendar',
+    icon: <Calendar className="w-5 h-5" />,
+  },
+  {
+    name: '场地管理',
+    path: '/admin/venues',
+    icon: <MapPin className="w-5 h-5" />,
+  },
+  {
+    name: '预算管理',
+    path: '/admin/budget',
+    icon: <DollarSign className="w-5 h-5" />,
   },
   {
     name: '系统设置',

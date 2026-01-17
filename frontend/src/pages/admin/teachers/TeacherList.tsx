@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, AlertCircle, FileText, DollarSign } from 'lucide-react';
 import { teachersApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { Teacher } from '../../../types';
@@ -58,12 +58,22 @@ export default function TeacherList() {
           <h1 className="text-2xl font-bold text-gray-900">教师管理</h1>
           <p className="mt-1 text-sm text-gray-500">管理艺术团所有教师信息</p>
         </div>
-        {canEdit && (
-          <Link to="/admin/teachers/new" className="btn-primary">
-            <Plus className="w-4 h-4 mr-2" />
-            添加教师
+        <div className="flex items-center space-x-3">
+          <Link to="/admin/teachers/applications" className="btn-secondary">
+            <FileText className="w-4 h-4 mr-2" />
+            入校申请
           </Link>
-        )}
+          <Link to="/admin/teachers/payments" className="btn-secondary">
+            <DollarSign className="w-4 h-4 mr-2" />
+            劳务发放
+          </Link>
+          {canEdit && (
+            <Link to="/admin/teachers/new" className="btn-primary">
+              <Plus className="w-4 h-4 mr-2" />
+              添加教师
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Filters */}

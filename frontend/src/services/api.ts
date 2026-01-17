@@ -11,6 +11,22 @@ import type {
   TeacherForm,
   ProgramForm,
   RehearsalForm,
+  Venue,
+  VenueBooking,
+  VenueTimeSlot,
+  VenueForm,
+  VenueBookingForm,
+  VenueScheduleDay,
+  TeacherEntryApplication,
+  TeacherEntryApplicationForm,
+  PaymentSource,
+  TeacherPayment,
+  TeacherPaymentForm,
+  BudgetCategory,
+  Budget,
+  Expense,
+  BudgetForm,
+  ExpenseForm,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -448,3 +464,480 @@ export const publicApi = {
 };
 
 export default api;
+
+// Calendar API
+export const calendarApi = {
+  // Event Types
+  getEventTypes: async () => {
+    const response = await api.get('/admin/calendar/event-types');
+    return response.data.event_types;
+  },
+
+  // Events (Admin)
+  list: async (params?: {
+    start_date?: string;
+    end_date?: string;
+    event_type_id?: number;
+    program_id?: number;
+    status?: string;
+  }) => {
+    const response = await api.get('/admin/calendar/events', { params });
+    return response.data.events;
+  },
+
+  get: async (id: number) => {
+    const response = await api.get(`/admin/calendar/events/${id}`);
+    return response.data.event;
+  },
+
+  create: async (data: {
+    event_type_id: number;
+    title: string;
+    description?: string;
+    program_id?: number;
+    start_date: string;
+    end_date?: string;
+    start_time?: string;
+    end_time?: string;
+    is_all_day?: boolean;
+    location?: string;
+    is_recurring?: boolean;
+    recurrence_rule?: string;
+    reminder_minutes?: number;
+    rehearsal_id?: number;
+    notify_members?: boolean;
+  }) => {
+    const response = await api.post('/admin/calendar/events', data);
+    return response.data.event;
+  },
+
+  update: async (id: number, data: Partial<{
+    event_type_id: number;
+    title: string;
+    description: string;
+    start_date: string;
+    end_date: string;
+    start_time: string;
+    end_time: string;
+    is_all_day: boolean;
+    location: string;
+    is_recurring: boolean;
+    recurrence_rule: string;
+    reminder_minutes: number;
+    notify_members: boolean;
+    status: string;
+  }>) => {
+    const response = await api.put(`/admin/calendar/events/${id}`, data);
+    return response.data.event;
+  },
+
+  delete: async (id: number) => {
+    await api.delete(`/admin/calendar/events/${id}`);
+  },
+
+  createFromRehearsal: async (rehearsalId: number, notifyMembers: boolean = false) => {
+    const response = await api.post('/admin/calendar/events/from-rehearsal', {
+      rehearsal_id: rehearsalId,
+      notify_members: notifyMembers,
+    });
+    return response.data.event;
+  },
+
+  // Notifications
+  sendNotification: async (eventId: number) => {
+    const response = await api.post(`/admin/calendar/events/${eventId}/send-notification`);
+    return response.data;
+  },
+
+  previewNotification: async (eventId: number) => {
+    const response = await api.get(`/admin/calendar/events/${eventId}/notification-preview`);
+    return response.data;
+  },
+};
+
+// Public Calendar API
+export const publicCalendarApi = {
+  getMonthEvents: async (year: number, month: number) => {
+    const response = await api.get(`/public/calendar/month/${year}/${month}`);
+    return response.data;
+  },
+
+  getWeekEvents: async (date?: string) => {
+    const response = await api.get('/public/calendar/week', {
+      params: { date },
+    });
+    return response.data;
+  },
+
+  getUpcomingEvents: async (days: number = 7, limit: number = 10) => {
+    const response = await api.get('/public/calendar/upcoming', {
+      params: { days, limit },
+    });
+    return response.data;
+  },
+
+  getTodayEvents: async () => {
+    const response = await api.get('/public/calendar/today');
+    return response.data;
+  },
+
+  getEventTypes: async () => {
+    const response = await api.get('/public/calendar/event-types');
+    return response.data.event_types;
+  },
+
+  getEvent: async (id: number) => {
+    const response = await api.get(`/public/calendar/events/${id}`);
+    return response.data.event;
+  },
+
+  getStats: async () => {
+    const response = await api.get('/public/calendar/stats');
+    return response.data;
+  },
+};
+
+// Venues API
+export const venuesApi = {
+  list: async (params?: { is_active?: boolean }) => {
+    const response = await api.get<{ venues: Venue[] }>('/admin/venues', { params });
+    return response.data.venues;
+  },
+
+  get: async (id: number, options?: { include_time_slots?: boolean }) => {
+    const response = await api.get<{ venue: Venue }>(`/admin/venues/${id}`, { params: options });
+    return response.data.venue;
+  },
+
+  create: async (data: VenueForm) => {
+    const response = await api.post<{ venue: Venue }>('/admin/venues', data);
+    return response.data.venue;
+  },
+
+  update: async (id: number, data: Partial<VenueForm>) => {
+    const response = await api.put<{ venue: Venue }>(`/admin/venues/${id}`, data);
+    return response.data.venue;
+  },
+
+  delete: async (id: number) => {
+    await api.delete(`/admin/venues/${id}`);
+  },
+
+  getTimeSlots: async (venueId: number, semesterId?: number) => {
+    const response = await api.get<{ time_slots: VenueTimeSlot[] }>(
+      `/admin/venues/${venueId}/timeslots`,
+      { params: { semester_id: semesterId } }
+    );
+    return response.data.time_slots;
+  },
+
+  updateTimeSlots: async (
+    venueId: number,
+    timeSlots: Omit<VenueTimeSlot, 'id' | 'venue_id' | 'semester_id' | 'day_name'>[],
+    semesterId?: number
+  ) => {
+    const response = await api.put<{ time_slots: VenueTimeSlot[] }>(
+      `/admin/venues/${venueId}/timeslots`,
+      { time_slots: timeSlots, semester_id: semesterId }
+    );
+    return response.data.time_slots;
+  },
+
+  getSchedule: async (venueId: number, startDate?: string, endDate?: string) => {
+    const response = await api.get<{
+      venue: Venue;
+      schedule: Record<string, VenueScheduleDay>;
+      start_date: string;
+      end_date: string;
+    }>(`/admin/venues/${venueId}/schedule`, {
+      params: { start_date: startDate, end_date: endDate },
+    });
+    return response.data;
+  },
+
+  getBookings: async (venueId: number, params?: { start_date?: string; end_date?: string; status?: string }) => {
+    const response = await api.get<{ bookings: VenueBooking[] }>(
+      `/admin/venues/${venueId}/bookings`,
+      { params }
+    );
+    return response.data.bookings;
+  },
+};
+
+// Bookings API
+export const bookingsApi = {
+  list: async (params?: {
+    venue_id?: number;
+    program_id?: number;
+    start_date?: string;
+    end_date?: string;
+    status?: string;
+  }) => {
+    const response = await api.get<{ bookings: VenueBooking[] }>('/admin/bookings', { params });
+    return response.data.bookings;
+  },
+
+  get: async (id: number) => {
+    const response = await api.get<{ booking: VenueBooking }>(`/admin/bookings/${id}`);
+    return response.data.booking;
+  },
+
+  create: async (data: VenueBookingForm) => {
+    const response = await api.post<{ booking: VenueBooking }>('/admin/bookings', data);
+    return response.data.booking;
+  },
+
+  update: async (id: number, data: Partial<VenueBookingForm>) => {
+    const response = await api.put<{ booking: VenueBooking }>(`/admin/bookings/${id}`, data);
+    return response.data.booking;
+  },
+
+  cancel: async (id: number) => {
+    await api.delete(`/admin/bookings/${id}`);
+  },
+};
+
+// Public Venues API
+export const publicVenuesApi = {
+  getSchedule: async (params?: { venue_id?: number; start_date?: string; end_date?: string }) => {
+    const response = await api.get('/public/venues/schedule', { params });
+    return response.data;
+  },
+};
+
+// Teacher Applications API
+export const teacherApplicationsApi = {
+  list: async (params?: {
+    status?: string;
+    teacher_id?: number;
+    start_date?: string;
+    end_date?: string;
+  }) => {
+    const response = await api.get<{ applications: TeacherEntryApplication[] }>(
+      '/admin/applications',
+      { params }
+    );
+    return response.data.applications;
+  },
+
+  listPending: async () => {
+    const response = await api.get<{ applications: TeacherEntryApplication[] }>(
+      '/admin/applications/pending'
+    );
+    return response.data.applications;
+  },
+
+  get: async (id: number) => {
+    const response = await api.get<{ application: TeacherEntryApplication }>(
+      `/admin/applications/${id}`
+    );
+    return response.data.application;
+  },
+
+  create: async (data: TeacherEntryApplicationForm) => {
+    const response = await api.post<{ application: TeacherEntryApplication }>(
+      '/admin/applications',
+      data
+    );
+    return response.data.application;
+  },
+
+  update: async (id: number, data: Partial<TeacherEntryApplicationForm>) => {
+    const response = await api.put<{ application: TeacherEntryApplication }>(
+      `/admin/applications/${id}`,
+      data
+    );
+    return response.data.application;
+  },
+
+  approve: async (id: number) => {
+    const response = await api.post<{ application: TeacherEntryApplication }>(
+      `/admin/applications/${id}/approve`
+    );
+    return response.data.application;
+  },
+
+  reject: async (id: number, reason?: string) => {
+    const response = await api.post<{ application: TeacherEntryApplication }>(
+      `/admin/applications/${id}/reject`,
+      { reason }
+    );
+    return response.data.application;
+  },
+
+  complete: async (id: number) => {
+    const response = await api.post<{ application: TeacherEntryApplication }>(
+      `/admin/applications/${id}/complete`
+    );
+    return response.data.application;
+  },
+
+  delete: async (id: number) => {
+    await api.delete(`/admin/applications/${id}`);
+  },
+
+  // Teacher-specific endpoints
+  getTeacherApplications: async (teacherId: number, status?: string) => {
+    const response = await api.get<{ applications: TeacherEntryApplication[] }>(
+      `/admin/applications/teachers/${teacherId}/applications`,
+      { params: { status } }
+    );
+    return response.data.applications;
+  },
+
+  createForTeacher: async (teacherId: number, data: Omit<TeacherEntryApplicationForm, 'teacher_id'>) => {
+    const response = await api.post<{ application: TeacherEntryApplication }>(
+      `/admin/applications/teachers/${teacherId}/applications`,
+      data
+    );
+    return response.data.application;
+  },
+};
+
+// Payment Sources API
+export const paymentSourcesApi = {
+  list: async (params?: { is_active?: boolean }) => {
+    const response = await api.get<{ sources: PaymentSource[] }>('/admin/payments/sources', { params });
+    return response.data.sources;
+  },
+
+  create: async (data: { name: string; description?: string; is_active?: boolean }) => {
+    const response = await api.post<{ source: PaymentSource }>('/admin/payments/sources', data);
+    return response.data.source;
+  },
+
+  update: async (id: number, data: Partial<{ name: string; description: string; is_active: boolean }>) => {
+    const response = await api.put<{ source: PaymentSource }>(`/admin/payments/sources/${id}`, data);
+    return response.data.source;
+  },
+};
+
+// Teacher Payments API
+export const teacherPaymentsApi = {
+  list: async (params?: { teacher_id?: number; semester_id?: number; status?: string }) => {
+    const response = await api.get<{ payments: TeacherPayment[] }>('/admin/payments', { params });
+    return response.data.payments;
+  },
+
+  get: async (id: number) => {
+    const response = await api.get<{ payment: TeacherPayment }>(`/admin/payments/${id}`);
+    return response.data.payment;
+  },
+
+  create: async (data: TeacherPaymentForm) => {
+    const response = await api.post<{ payment: TeacherPayment }>('/admin/payments', data);
+    return response.data.payment;
+  },
+
+  update: async (id: number, data: Partial<TeacherPaymentForm>) => {
+    const response = await api.put<{ payment: TeacherPayment }>(`/admin/payments/${id}`, data);
+    return response.data.payment;
+  },
+
+  delete: async (id: number) => {
+    await api.delete(`/admin/payments/${id}`);
+  },
+
+  getSummary: async (semesterId?: number) => {
+    const response = await api.get('/admin/payments/summary', {
+      params: { semester_id: semesterId },
+    });
+    return response.data;
+  },
+
+  // Teacher-specific endpoints
+  getTeacherPayments: async (teacherId: number, params?: { status?: string; semester_id?: number }) => {
+    const response = await api.get<{ payments: TeacherPayment[] }>(
+      `/admin/payments/teachers/${teacherId}`,
+      { params }
+    );
+    return response.data.payments;
+  },
+
+  createForTeacher: async (teacherId: number, data: Omit<TeacherPaymentForm, 'teacher_id'>) => {
+    const response = await api.post<{ payment: TeacherPayment }>(
+      `/admin/payments/teachers/${teacherId}`,
+      data
+    );
+    return response.data.payment;
+  },
+};
+
+// Budget Categories API
+export const budgetCategoriesApi = {
+  list: async (params?: { is_active?: boolean }) => {
+    const response = await api.get<{ categories: BudgetCategory[] }>('/admin/budget/categories', { params });
+    return response.data.categories;
+  },
+
+  create: async (data: { name: string; description?: string; sort_order?: number; is_active?: boolean }) => {
+    const response = await api.post<{ category: BudgetCategory }>('/admin/budget/categories', data);
+    return response.data.category;
+  },
+
+  update: async (id: number, data: Partial<{ name: string; description: string; sort_order: number; is_active: boolean }>) => {
+    const response = await api.put<{ category: BudgetCategory }>(`/admin/budget/categories/${id}`, data);
+    return response.data.category;
+  },
+};
+
+// Budgets API
+export const budgetsApi = {
+  list: async (params?: { semester_id?: number; program_id?: number; category_id?: number }) => {
+    const response = await api.get<{ budgets: Budget[] }>('/admin/budget', { params });
+    return response.data.budgets;
+  },
+
+  get: async (id: number, options?: { include_expenses?: boolean }) => {
+    const response = await api.get<{ budget: Budget }>(`/admin/budget/${id}`, { params: options });
+    return response.data.budget;
+  },
+
+  create: async (data: BudgetForm) => {
+    const response = await api.post<{ budget: Budget }>('/admin/budget', data);
+    return response.data.budget;
+  },
+
+  update: async (id: number, data: Partial<BudgetForm>) => {
+    const response = await api.put<{ budget: Budget }>(`/admin/budget/${id}`, data);
+    return response.data.budget;
+  },
+
+  delete: async (id: number) => {
+    await api.delete(`/admin/budget/${id}`);
+  },
+
+  getSummary: async (semesterId?: number) => {
+    const response = await api.get('/admin/budget/summary', {
+      params: { semester_id: semesterId },
+    });
+    return response.data;
+  },
+};
+
+// Expenses API
+export const expensesApi = {
+  list: async (params?: { budget_id?: number; status?: string; start_date?: string; end_date?: string }) => {
+    const response = await api.get<{ expenses: Expense[] }>('/admin/budget/expenses', { params });
+    return response.data.expenses;
+  },
+
+  get: async (id: number) => {
+    const response = await api.get<{ expense: Expense }>(`/admin/budget/expenses/${id}`);
+    return response.data.expense;
+  },
+
+  create: async (data: ExpenseForm) => {
+    const response = await api.post<{ expense: Expense }>('/admin/budget/expenses', data);
+    return response.data.expense;
+  },
+
+  update: async (id: number, data: Partial<ExpenseForm>) => {
+    const response = await api.put<{ expense: Expense }>(`/admin/budget/expenses/${id}`, data);
+    return response.data.expense;
+  },
+
+  delete: async (id: number) => {
+    await api.delete(`/admin/budget/expenses/${id}`);
+  },
+};

@@ -1,0 +1,189 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import type { CalendarEvent, EventsByDate } from '../../types';
+import { publicCalendarApi } from '../../services/api';
+import MonthView from '../../components/Calendar/MonthView';
+import EventList from '../../components/Calendar/EventList';
+import EventDetailModal from '../../components/Calendar/EventDetailModal';
+import { AlertCircle, TrendingUp } from 'lucide-react';
+
+const CalendarPage: React.FC = () => {
+  const navigate = useNavigate();
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [eventsByDate, setEventsByDate] = useState<EventsByDate>({});
+  const [weekEvents, setWeekEvents] = useState<CalendarEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+
+  useEffect(() => {
+    loadMonthEvents();
+  }, [year, month]);
+
+  useEffect(() => {
+    loadWeekEvents();
+  }, []);
+
+  const loadMonthEvents = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const data = await publicCalendarApi.getMonthEvents(year, month);
+      setEventsByDate(data.events_by_date || {});
+    } catch (err: any) {
+      setError(err.response?.data?.error || '加载失败');
+      console.error('Load month events error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadWeekEvents = async () => {
+    try {
+      const data = await publicCalendarApi.getWeekEvents();
+      const allEvents: CalendarEvent[] = [];
+      Object.values(data.events_by_date || {}).forEach((events: any) => {
+        allEvents.push(...events);
+      });
+      setWeekEvents(allEvents);
+    } catch (err) {
+      console.error('Load week events error:', err);
+    }
+  };
+
+  const handlePrevMonth = () => {
+    if (month === 1) {
+      setYear(year - 1);
+      setMonth(12);
+    } else {
+      setMonth(month - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (month === 12) {
+      setYear(year + 1);
+      setMonth(1);
+    } else {
+      setMonth(month + 1);
+    }
+  };
+
+  const handleEventClick = (event: CalendarEvent) => {
+    setSelectedEvent(event);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedEvent(null);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">艺术团队历</h1>
+              <p className="mt-1 text-sm text-gray-600">查看演出、排练和其他活动安排</p>
+            </div>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => navigate('/attendance')}
+                className="btn-secondary"
+              >
+                考勤公示
+              </button>
+              <button
+                onClick={() => navigate('/login')}
+                className="btn-primary"
+              >
+                管理后台
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
+            <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0 mt-0.5" />
+            <span className="text-sm text-red-700">{error}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Calendar */}
+          <div className="lg:col-span-2">
+            {loading ? (
+              <div className="bg-white rounded-lg shadow p-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+                <p className="mt-4 text-gray-500">加载中...</p>
+              </div>
+            ) : (
+              <MonthView
+                year={year}
+                month={month}
+                eventsByDate={eventsByDate}
+                onPrevMonth={handlePrevMonth}
+                onNextMonth={handleNextMonth}
+                onEventClick={handleEventClick}
+              />
+            )}
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Week Events */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center space-x-2 mb-4">
+                <TrendingUp className="h-5 w-5 text-primary-600" />
+                <h3 className="text-lg font-semibold text-gray-900">本周事件</h3>
+              </div>
+              <EventList
+                events={weekEvents}
+                onEventClick={handleEventClick}
+              />
+            </div>
+
+            {/* Legend */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">图例</h3>
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <span className="text-lg">🎭</span>
+                  <span className="text-sm text-gray-700">演出</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-lg">📋</span>
+                  <span className="text-sm text-gray-700">审核</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-lg">🎵</span>
+                  <span className="text-sm text-gray-700">排练</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-lg">👥</span>
+                  <span className="text-sm text-gray-700">会议</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-lg">📌</span>
+                  <span className="text-sm text-gray-700">其他</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Event Detail Modal */}
+      {selectedEvent && (
+        <EventDetailModal event={selectedEvent} onClose={handleCloseModal} />
+      )}
+    </div>
+  );
+};
+
+export default CalendarPage;

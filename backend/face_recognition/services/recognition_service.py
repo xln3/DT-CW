@@ -1,0 +1,408 @@
+"""
+Group photo recognition service.
+
+Recognizes faces in group photos and matches them to program members.
+Key feature: Program-scoped matching for better accuracy.
+"""
+
+import logging
+import time
+from datetime import datetime
+from typing import Dict, List, Optional
+import json
+import os
+import uuid
+
+from database import db
+from ..config import FaceRecognitionConfig
+from ..core.feature_extractor import get_feature_extractor
+from ..core.face_matcher import FaceMatcher
+
+logger = logging.getLogger(__name__)
+
+
+class RecognitionService:
+    """
+    Handles group photo face recognition.
+    
+    Key features:
+    - Program-scoped matching (only matches against program members)
+    - Automatic attendance update
+    - Error recording for calibration triggers
+    """
+    
+    def __init__(self, db_session=None):
+        """
+        Initialize service.
+        
+        Args:
+            db_session: SQLAlchemy session
+        """
+        self.db = db_session or db.session
+        self.extractor = get_feature_extractor()
+        self.matcher = FaceMatcher(self.db)
+    
+    def recognize_group_photo(
+        self,
+        photo_data: bytes,
+        rehearsal_id: int,
+        photo_type: str,
+        program_id: int,
+        photo_url: str = None,
+        save_crops: bool = True
+    ) -> Dict:
+        """
+        Recognize faces in a group photo.
+        
+        Args:
+            photo_data: Photo binary data
+            rehearsal_id: Rehearsal ID
+            photo_type: 'check_in' or 'check_out'
+            program_id: Program ID for scoped matching
+            photo_url: URL where original photo is stored
+            save_crops: Whether to save face crops
+            
+        Returns:
+            Recognition results with matched members
+        """
+        from models.face_models import PhotoRecognition, DetectedFace
+        from models import Attendance, ProgramMember
+        
+        start_time = time.time()
+        
+        # 1. Create recognition record
+        recognition = PhotoRecognition(
+            rehearsal_id=rehearsal_id,
+            photo_type=photo_type,
+            photo_url=photo_url or '',
+            program_id=program_id,
+            status='processing'
+        )
+        self.db.add(recognition)
+        self.db.flush()
+        
+        try:
+            # 2. Detect faces
+            detection_start = time.time()
+            detected_faces = self.extractor.detect_faces(photo_data)
+            detection_time = int((time.time() - detection_start) * 1000)
+            
+            if not detected_faces:
+                recognition.status = 'completed'
+                recognition.total_faces = 0
+                recognition.detection_time_ms = detection_time
+                self.db.commit()
+                
+                return {
+                    'success': True,
+                    'recognition_id': recognition.id,
+                    'total_faces': 0,
+                    'message': '未检测到人脸',
+                    'faces': [],
+                    'attendance_summary': {}
+                }
+            
+            # 3. Save detected faces
+            embeddings = []
+            face_records = []
+            
+            for i, face_data in enumerate(detected_faces):
+                face_crop_url = self._save_face_crop(
+                    face_data.get('face_crop'),
+                    recognition.id,
+                    i
+                ) if save_crops else f'face_{recognition.id}_{i}.jpg'
+                
+                face_record = DetectedFace(
+                    recognition_id=recognition.id,
+                    face_crop_url=face_crop_url,
+                    match_status='unmatched'
+                )
+                face_record.embedding_json = json.dumps(face_data['embedding'])
+                
+                self.db.add(face_record)
+                face_records.append(face_record)
+                embeddings.append(face_data['embedding'])
+            
+            self.db.flush()
+            
+            # 4. Match faces against program members
+            matching_start = time.time()
+            match_results = self.matcher.match_faces_in_program(embeddings, program_id)
+            matching_time = int((time.time() - matching_start) * 1000)
+            
+            # 5. Update face records with match results
+            matched_count = 0
+            uncertain_count = 0
+            unmatched_count = 0
+            
+            for face_record, result in zip(face_records, match_results):
+                face_record.match_status = result['match_status']
+                face_record.matched_member_id = result.get('matched_member_id')
+                face_record.match_confidence = result.get('confidence')
+                
+                if 'top_candidates' in result:
+                    face_record.set_top_candidates(result['top_candidates'])
+                
+                if result['match_status'] == 'confirmed':
+                    matched_count += 1
+                elif result['match_status'] == 'uncertain':
+                    uncertain_count += 1
+                else:
+                    unmatched_count += 1
+            
+            # 6. Update recognition record
+            recognition.status = 'completed'
+            recognition.total_faces = len(detected_faces)
+            recognition.matched_faces = matched_count
+            recognition.uncertain_faces = uncertain_count
+            recognition.unmatched_faces = unmatched_count
+            recognition.detection_time_ms = detection_time
+            recognition.matching_time_ms = matching_time
+            recognition.completed_at = datetime.utcnow()
+            
+            # 7. Update attendance records
+            attendance_summary = self._update_attendance_records(
+                rehearsal_id=rehearsal_id,
+                program_id=program_id,
+                photo_type=photo_type,
+                match_results=match_results
+            )
+            
+            self.db.commit()
+            
+            total_time = int((time.time() - start_time) * 1000)
+            
+            # 8. Build response
+            return {
+                'success': True,
+                'recognition_id': recognition.id,
+                'program_id': program_id,
+                'total_faces': len(detected_faces),
+                'matched_count': matched_count,
+                'uncertain_count': uncertain_count,
+                'unmatched_count': unmatched_count,
+                'faces': [
+                    {
+                        'face_id': face.id,
+                        'face_crop_url': face.face_crop_url,
+                        'match_status': face.match_status,
+                        'matched_member_id': face.matched_member_id,
+                        'matched_member_name': (
+                            face.matched_member.name 
+                            if face.matched_member else None
+                        ),
+                        'confidence': face.match_confidence,
+                        'top_candidates': face.get_top_candidates()
+                    }
+                    for face in face_records
+                ],
+                'attendance_summary': attendance_summary,
+                'timing': {
+                    'detection_ms': detection_time,
+                    'matching_ms': matching_time,
+                    'total_ms': total_time
+                }
+            }
+            
+        except Exception as e:
+            recognition.status = 'failed'
+            recognition.error_message = str(e)
+            self.db.commit()
+            
+            logger.error(f"Recognition failed: {e}")
+            raise
+    
+    def annotate_face(
+        self,
+        detected_face_id: int,
+        member_id: Optional[int],
+        annotated_by: int,
+        feedback_type: str = 'correct'
+    ) -> Dict:
+        """
+        Manually annotate or correct a detected face.
+        
+        Args:
+            detected_face_id: Face ID to annotate
+            member_id: Member ID (None if not a member)
+            annotated_by: User ID who made the annotation
+            feedback_type: 'correct', 'incorrect', 'unknown'
+            
+        Returns:
+            Annotation result
+        """
+        from models.face_models import DetectedFace, RecognitionError
+        
+        face = self.db.query(DetectedFace).get(detected_face_id)
+        if not face:
+            return {'success': False, 'error': '人脸不存在'}
+        
+        # Record error if this is a correction
+        if face.matched_member_id != member_id and face.match_status == 'confirmed':
+            error = RecognitionError(
+                rehearsal_id=face.recognition.rehearsal_id,
+                photo_type=face.recognition.photo_type,
+                detected_face_id=face.id,
+                error_type='misidentification' if member_id else 'false_positive',
+                predicted_member_id=face.matched_member_id,
+                predicted_confidence=face.match_confidence,
+                actual_member_id=member_id,
+                corrected_by=annotated_by,
+                corrected_at=datetime.utcnow()
+            )
+            self.db.add(error)
+        
+        # Update face annotation
+        old_member_id = face.matched_member_id
+        face.annotated_member_id = member_id
+        face.annotated_by = annotated_by
+        face.annotated_at = datetime.utcnow()
+        face.annotation_type = 'admin'
+        face.match_status = 'manual'
+        
+        # Update attendance if needed
+        if old_member_id != member_id:
+            self._fix_attendance(
+                face.recognition,
+                old_member_id,
+                member_id
+            )
+        
+        self.db.commit()
+        
+        return {
+            'success': True,
+            'face_id': face.id,
+            'annotated_member_id': member_id
+        }
+    
+    def get_recognition_result(self, recognition_id: int) -> Dict:
+        """Get recognition result details."""
+        from models.face_models import PhotoRecognition
+        
+        recognition = self.db.query(PhotoRecognition).get(recognition_id)
+        if not recognition:
+            return {'error': '识别记录不存在'}
+        
+        return recognition.to_dict(include_faces=True)
+    
+    def _update_attendance_records(
+        self,
+        rehearsal_id: int,
+        program_id: int,
+        photo_type: str,
+        match_results: List[Dict]
+    ) -> Dict:
+        """Update attendance based on recognition results."""
+        from models import Attendance, ProgramMember
+        
+        # Get matched member IDs
+        matched_ids = {
+            r['matched_member_id'] 
+            for r in match_results 
+            if r.get('matched_member_id') and r['match_status'] == 'confirmed'
+        }
+        
+        # Get all program members
+        program_members = self.db.query(ProgramMember).filter(
+            ProgramMember.program_id == program_id,
+            ProgramMember.status == 'active'
+        ).all()
+        
+        detected = []
+        not_detected = []
+        
+        for pm in program_members:
+            # Get or create attendance
+            attendance = self.db.query(Attendance).filter_by(
+                rehearsal_id=rehearsal_id,
+                member_id=pm.member_id
+            ).first()
+            
+            if not attendance:
+                attendance = Attendance(
+                    rehearsal_id=rehearsal_id,
+                    member_id=pm.member_id
+                )
+                self.db.add(attendance)
+            
+            # Update detection flag
+            is_detected = pm.member_id in matched_ids
+            
+            if photo_type == 'check_in':
+                attendance.detected_before = is_detected
+            else:
+                attendance.detected_after = is_detected
+            
+            attendance.calculate_status()
+            
+            if is_detected:
+                detected.append(pm.member_id)
+            else:
+                not_detected.append(pm.member_id)
+        
+        return {
+            'detected': detected,
+            'not_detected': not_detected,
+            'total_members': len(program_members)
+        }
+    
+    def _fix_attendance(
+        self,
+        recognition,
+        old_member_id: Optional[int],
+        new_member_id: Optional[int]
+    ):
+        """Fix attendance when annotation is corrected."""
+        from models import Attendance
+        
+        # Remove old detection
+        if old_member_id:
+            old_attendance = self.db.query(Attendance).filter_by(
+                rehearsal_id=recognition.rehearsal_id,
+                member_id=old_member_id
+            ).first()
+            
+            if old_attendance:
+                if recognition.photo_type == 'check_in':
+                    old_attendance.detected_before = False
+                else:
+                    old_attendance.detected_after = False
+                old_attendance.calculate_status()
+        
+        # Add new detection
+        if new_member_id:
+            new_attendance = self.db.query(Attendance).filter_by(
+                rehearsal_id=recognition.rehearsal_id,
+                member_id=new_member_id
+            ).first()
+            
+            if not new_attendance:
+                new_attendance = Attendance(
+                    rehearsal_id=recognition.rehearsal_id,
+                    member_id=new_member_id
+                )
+                self.db.add(new_attendance)
+            
+            if recognition.photo_type == 'check_in':
+                new_attendance.detected_before = True
+            else:
+                new_attendance.detected_after = True
+            new_attendance.calculate_status()
+    
+    def _save_face_crop(
+        self, 
+        face_crop_data: bytes, 
+        recognition_id: int, 
+        face_index: int
+    ) -> str:
+        """
+        Save face crop image.
+        
+        In production, this should upload to cloud storage.
+        For now, returns a placeholder URL.
+        """
+        # TODO: Implement actual storage
+        filename = f"face_crops/{recognition_id}/{face_index}_{uuid.uuid4().hex[:8]}.jpg"
+        return f"/uploads/{filename}"

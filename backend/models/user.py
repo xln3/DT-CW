@@ -16,6 +16,7 @@ class User(db.Model):
     phone = db.Column(db.String(20))
     role = db.Column(db.String(20), nullable=False)  # admin/committee/program_manager
     status = db.Column(db.String(20), default='active')  # active/inactive
+    member_id = db.Column(db.Integer, db.ForeignKey('members.id'))  # Link to member
     last_login_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -27,6 +28,7 @@ class User(db.Model):
         back_populates='user',
         lazy='dynamic'
     )
+    member = db.relationship('Member', backref='user_account', foreign_keys=[member_id])
 
     ROLE_ADMIN = 'admin'
     ROLE_COMMITTEE = 'committee'

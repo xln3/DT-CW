@@ -26,12 +26,16 @@ def create_app(config_name=None):
         from models import (
             User, Semester, SystemConfig, AuditLog,
             Member, Teacher, Program, ProgramMember,
-            Rehearsal, Attendance, FaceVector, FaceAnnotation
+            Rehearsal, Attendance, FaceVector, FaceAnnotation,
+            EventType, CalendarEvent
         )
         db.create_all()
 
         # Initialize default system config
         SystemConfig.init_defaults()
+
+        # Initialize default event types
+        EventType.init_default_types()
 
         # Create default admin user if not exists
         if not User.query.filter_by(username='admin').first():
