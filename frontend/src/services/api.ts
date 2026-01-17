@@ -863,6 +863,7 @@ export const publicScheduleApi = {
   },
 };
 
+
 // Teacher Applications API
 export const teacherApplicationsApi = {
   list: async (params?: {

@@ -226,6 +226,7 @@ class RecognitionService:
         This method also updates the member's face embedding if a member is
         specified, allowing the system to learn from manual corrections.
 
+
         Args:
             detected_face_id: Face ID to annotate
             member_id: Member ID (None if not a member)
@@ -242,6 +243,7 @@ class RecognitionService:
         face = self.db.query(DetectedFace).get(detected_face_id)
         if not face:
             return {'success': False, 'error': '人脸不存在'}
+
 
         # Record error if this is a correction
         if face.matched_member_id != member_id and face.match_status == 'confirmed':
@@ -262,6 +264,7 @@ class RecognitionService:
         old_matched_id = face.matched_member_id
         old_annotated_id = face.annotated_member_id
         old_match_status = face.match_status
+
 
         face.annotated_member_id = member_id
         face.annotated_by = annotated_by

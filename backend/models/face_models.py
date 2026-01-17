@@ -308,6 +308,7 @@ class RecognitionError(db.Model):
     # Relationships
     rehearsal = db.relationship('Rehearsal', back_populates='recognition_errors')
 
+
     # Error type constants
     ERROR_FALSE_POSITIVE = 'false_positive'
     ERROR_FALSE_NEGATIVE = 'false_negative'
