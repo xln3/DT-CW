@@ -16,6 +16,7 @@ def _sort_members_by_pinyin(members):
     return sorted(members, key=sort_key)
 
 
+
 def _create_user_for_member(member):
     """Create a user account for a member if conditions are met.
 
@@ -58,6 +59,7 @@ def _create_user_for_member(member):
     db.session.commit()
 
     return user
+
 
 
 members_bp = Blueprint('members', __name__)

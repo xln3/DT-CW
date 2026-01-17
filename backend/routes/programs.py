@@ -624,6 +624,7 @@ def import_programs_csv():
 
 
 
+
 def _sync_member_attendance(program_id, member_id):
     """Create attendance records for a member for all existing rehearsals of the program."""
     rehearsals = Rehearsal.query.filter_by(program_id=program_id).all()
