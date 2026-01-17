@@ -17,6 +17,9 @@ import {
   Image as ImageIcon,
   UserCheck,
   UserX,
+  Undo2,
+  Send,
+  Trash2,
 } from 'lucide-react';
 import { rehearsalsApi, faceRecognitionApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -51,6 +54,14 @@ interface RecognitionState {
   recognition: RecognitionData | null;
   faces: DetectedFaceData[];
   error: string | null;
+}
+
+// Pending annotation waiting for confirmation
+interface PendingAnnotation {
+  face_id: number;
+  photoType: PhotoType;
+  member_id: number | null;
+  member_name: string | null;
 }
 
 export default function RehearsalDetail() {
@@ -88,6 +99,10 @@ export default function RehearsalDetail() {
     face: DetectedFaceData;
   } | null>(null);
   const [programMembers, setProgramMembers] = useState<{ id: number; name: string }[]>([]);
+
+  // Pending annotations (staged but not yet submitted)
+  const [pendingAnnotations, setPendingAnnotations] = useState<PendingAnnotation[]>([]);
+  const [isSubmittingAnnotations, setIsSubmittingAnnotations] = useState(false);
 
   const checkInInputRef = useRef<HTMLInputElement>(null);
   const checkOutInputRef = useRef<HTMLInputElement>(null);
@@ -212,41 +227,100 @@ export default function RehearsalDetail() {
     e.target.value = '';
   };
 
-  const handleAnnotate = async (face: DetectedFaceData, memberId: number | null) => {
-    if (!activeAnnotation) return;
+  // Stage an annotation (don't submit yet)
+  const handleStageAnnotation = (face: DetectedFaceData, memberId: number | null, photoType?: PhotoType) => {
+    const type = photoType || activeAnnotation?.photoType;
+    if (!type) return;
 
-    const setState = activeAnnotation.photoType === 'check_in'
-      ? setCheckInRecognition
-      : setCheckOutRecognition;
+    const memberName = memberId
+      ? programMembers.find(m => m.id === memberId)?.name || null
+      : null;
+
+    // Remove any existing pending annotation for this face
+    setPendingAnnotations(prev => {
+      const filtered = prev.filter(p => p.face_id !== face.face_id);
+      return [...filtered, {
+        face_id: face.face_id,
+        photoType: type,
+        member_id: memberId,
+        member_name: memberName,
+      }];
+    });
+
+    setActiveAnnotation(null);
+  };
+
+  // Quick confirm for uncertain faces (confirm the system's guess)
+  const handleQuickConfirm = (face: DetectedFaceData, photoType: PhotoType) => {
+    if (!face.matched_member_id) return;
+    handleStageAnnotation(face, face.matched_member_id, photoType);
+  };
+
+  // Remove a pending annotation
+  const handleRemovePendingAnnotation = (faceId: number) => {
+    setPendingAnnotations(prev => prev.filter(p => p.face_id !== faceId));
+  };
+
+  // Clear all pending annotations
+  const handleClearAllPendingAnnotations = () => {
+    setPendingAnnotations([]);
+  };
+
+  // Submit all pending annotations
+  const handleSubmitAllAnnotations = async () => {
+    if (pendingAnnotations.length === 0) return;
+
+    setIsSubmittingAnnotations(true);
+    setError('');
 
     try {
-      await faceRecognitionApi.annotateFace(face.face_id, memberId, 'correct');
+      // Submit all annotations
+      for (const annotation of pendingAnnotations) {
+        await faceRecognitionApi.annotateFace(
+          annotation.face_id,
+          annotation.member_id,
+          'correct'
+        );
+      }
 
-      // Update local state
-      setState(prev => ({
+      // Update local state for both check-in and check-out
+      const updateFaces = (prev: RecognitionState, photoType: PhotoType): RecognitionState => ({
         ...prev,
-        faces: prev.faces.map(f =>
-          f.face_id === face.face_id
-            ? {
-                ...f,
-                annotated_member_id: memberId ?? undefined,
-                annotated_member_name: memberId
-                  ? programMembers.find(m => m.id === memberId)?.name
-                  : undefined,
-                match_status: 'manual' as FaceMatchStatus,
-              }
-            : f
-        ),
-      }));
+        faces: prev.faces.map(f => {
+          const pending = pendingAnnotations.find(
+            p => p.face_id === f.face_id && p.photoType === photoType
+          );
+          if (pending) {
+            return {
+              ...f,
+              annotated_member_id: pending.member_id ?? undefined,
+              annotated_member_name: pending.member_name ?? undefined,
+              match_status: 'manual' as FaceMatchStatus,
+            };
+          }
+          return f;
+        }),
+      });
 
-      setActiveAnnotation(null);
+      setCheckInRecognition(prev => updateFaces(prev, 'check_in'));
+      setCheckOutRecognition(prev => updateFaces(prev, 'check_out'));
+
+      // Clear pending annotations
+      setPendingAnnotations([]);
 
       // Refresh attendance
       const updatedAttendance = await rehearsalsApi.getAttendance(Number(id));
       setAttendance(updatedAttendance);
     } catch (err: any) {
-      setError(err.response?.data?.error || '标注失败');
+      setError(err.response?.data?.error || '提交标注失败');
+    } finally {
+      setIsSubmittingAnnotations(false);
     }
+  };
+
+  // Get pending annotation for a face (if any)
+  const getPendingAnnotation = (faceId: number): PendingAnnotation | undefined => {
+    return pendingAnnotations.find(p => p.face_id === faceId);
   };
 
   const getStatusBadge = (status: AttendanceStatus) => {
@@ -411,58 +485,116 @@ export default function RehearsalDetail() {
               <div>
                 <h5 className="text-sm font-medium text-gray-700 mb-2">检测到的人脸</h5>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {faces.map((face) => (
-                    <div
-                      key={face.face_id}
-                      className={`relative border rounded-lg p-2 ${
-                        face.match_status === 'uncertain' || face.match_status === 'unmatched'
-                          ? 'border-yellow-300 bg-yellow-50'
-                          : 'border-gray-200'
-                      }`}
-                    >
-                      {face.face_crop_url ? (
-                        <img
-                          src={face.face_crop_url}
-                          alt="人脸"
-                          className="w-full aspect-square object-cover rounded"
-                        />
-                      ) : (
-                        <div className="w-full aspect-square bg-gray-200 rounded flex items-center justify-center">
-                          <Users className="w-8 h-8 text-gray-400" />
-                        </div>
-                      )}
+                  {faces.map((face) => {
+                    const pending = getPendingAnnotation(face.face_id);
+                    const hasPending = !!pending;
 
-                      <div className="mt-2 space-y-1">
-                        {getMatchStatusBadge(face.match_status)}
+                    return (
+                      <div
+                        key={face.face_id}
+                        className={`relative border-2 rounded-lg p-2 ${
+                          hasPending
+                            ? 'border-orange-400 bg-orange-50 ring-2 ring-orange-200'
+                            : face.match_status === 'uncertain' || face.match_status === 'unmatched'
+                              ? 'border-yellow-300 bg-yellow-50'
+                              : 'border-gray-200'
+                        }`}
+                      >
+                        {/* Pending badge */}
+                        {hasPending && (
+                          <div className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">
+                            待提交
+                          </div>
+                        )}
 
-                        {face.match_status === 'confirmed' || face.match_status === 'manual' ? (
-                          <p className="text-sm font-medium truncate">
-                            {face.annotated_member_name || face.matched_member_name || '已识别'}
-                          </p>
-                        ) : face.match_status === 'uncertain' ? (
-                          <p className="text-sm text-yellow-700 truncate">
-                            可能是: {face.matched_member_name}
-                            {face.confidence && (
-                              <span className="text-xs ml-1">
-                                ({Math.round(face.confidence * 100)}%)
-                              </span>
-                            )}
-                          </p>
+                        {face.face_crop_url ? (
+                          <img
+                            src={face.face_crop_url}
+                            alt="人脸"
+                            className="w-full aspect-square object-cover rounded"
+                          />
                         ) : (
-                          <p className="text-sm text-gray-500">未识别</p>
+                          <div className="w-full aspect-square bg-gray-200 rounded flex items-center justify-center">
+                            <Users className="w-8 h-8 text-gray-400" />
+                          </div>
                         )}
 
-                        {canEdit && (face.match_status === 'uncertain' || face.match_status === 'unmatched') && (
-                          <button
-                            onClick={() => setActiveAnnotation({ photoType, face })}
-                            className="w-full mt-1 text-xs py-1 px-2 bg-primary-100 text-primary-700 rounded hover:bg-primary-200"
-                          >
-                            手动标注
-                          </button>
-                        )}
+                        <div className="mt-2 space-y-1">
+                          {hasPending ? (
+                            <>
+                              <span className="px-2 py-0.5 text-xs rounded bg-orange-100 text-orange-800">
+                                待确认
+                              </span>
+                              <p className="text-sm font-medium truncate text-orange-700">
+                                {pending.member_name || '非成员'}
+                              </p>
+                              <button
+                                onClick={() => handleRemovePendingAnnotation(face.face_id)}
+                                className="w-full mt-1 text-xs py-1 px-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 flex items-center justify-center"
+                              >
+                                <Undo2 className="w-3 h-3 mr-1" />
+                                撤销
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {getMatchStatusBadge(face.match_status)}
+
+                              {face.match_status === 'confirmed' || face.match_status === 'manual' ? (
+                                <p className="text-sm font-medium truncate">
+                                  {face.annotated_member_name || face.matched_member_name || '已识别'}
+                                </p>
+                              ) : face.match_status === 'uncertain' ? (
+                                <p className="text-sm text-yellow-700 truncate">
+                                  可能是: {face.matched_member_name}
+                                  {face.confidence && (
+                                    <span className="text-xs ml-1">
+                                      ({Math.round(face.confidence * 100)}%)
+                                    </span>
+                                  )}
+                                </p>
+                              ) : (
+                                <p className="text-sm text-gray-500">未识别</p>
+                              )}
+
+                              {canEdit && face.match_status === 'uncertain' && face.matched_member_id && (
+                                <div className="flex gap-1 mt-1">
+                                  <button
+                                    onClick={() => handleQuickConfirm(face, photoType)}
+                                    className="flex-1 text-xs py-1 px-2 bg-green-100 text-green-700 rounded hover:bg-green-200 flex items-center justify-center"
+                                  >
+                                    <Check className="w-3 h-3 mr-1" />
+                                    确认
+                                  </button>
+                                  <button
+                                    onClick={() => setActiveAnnotation({ photoType, face })}
+                                    className="flex-1 text-xs py-1 px-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                  >
+                                    改为
+                                  </button>
+                                </div>
+                              )}
+
+                              {canEdit && face.match_status !== 'uncertain' && (
+                                <button
+                                  onClick={() => setActiveAnnotation({ photoType, face })}
+                                  className={`w-full mt-1 text-xs py-1 px-2 rounded ${
+                                    face.match_status === 'confirmed' || face.match_status === 'manual'
+                                      ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                      : 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+                                  }`}
+                                >
+                                  {face.match_status === 'confirmed' || face.match_status === 'manual'
+                                    ? '修改'
+                                    : '手动标注'}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -589,6 +721,65 @@ export default function RehearsalDetail() {
             {renderPhotoUploadSection('check_in', '课前', checkInRecognition, checkInInputRef)}
             {renderPhotoUploadSection('check_out', '课后', checkOutRecognition, checkOutInputRef)}
           </div>
+
+          {/* Pending Annotations Actions */}
+          {pendingAnnotations.length > 0 && (
+            <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center">
+                  <AlertCircle className="w-5 h-5 text-orange-500 mr-2" />
+                  <span className="text-sm font-medium text-orange-800">
+                    您有 {pendingAnnotations.length} 个待提交的标注
+                  </span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={handleClearAllPendingAnnotations}
+                    disabled={isSubmittingAnnotations}
+                    className="flex items-center px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1.5" />
+                    清空全部
+                  </button>
+                  <button
+                    onClick={handleSubmitAllAnnotations}
+                    disabled={isSubmittingAnnotations}
+                    className="flex items-center px-4 py-1.5 text-sm bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {isSubmittingAnnotations ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                        提交中...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-1.5" />
+                        提交修改
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Pending annotations summary */}
+              <div className="mt-3 text-sm text-orange-700">
+                <p>待提交标注列表：</p>
+                <ul className="mt-1 ml-4 list-disc">
+                  {pendingAnnotations.map((p) => (
+                    <li key={p.face_id}>
+                      人脸 #{p.face_id} → {p.member_name || '非成员'}
+                      <button
+                        onClick={() => handleRemovePendingAnnotation(p.face_id)}
+                        className="ml-2 text-orange-500 hover:text-orange-700 underline"
+                      >
+                        撤销
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -800,7 +991,9 @@ export default function RehearsalDetail() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
             <div className="p-4 border-b">
               <h3 className="text-lg font-medium">手动标注人脸</h3>
-              <p className="text-sm text-gray-500 mt-1">请选择这个人脸对应的成员</p>
+              <p className="text-sm text-gray-500 mt-1">
+                选择成员后将暂存，您可以继续标注其他人脸，最后统一提交
+              </p>
             </div>
 
             <div className="p-4">
@@ -824,7 +1017,7 @@ export default function RehearsalDetail() {
                 {programMembers.map((member) => (
                   <button
                     key={member.id}
-                    onClick={() => handleAnnotate(activeAnnotation.face, member.id)}
+                    onClick={() => handleStageAnnotation(activeAnnotation.face, member.id)}
                     className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded flex items-center"
                   >
                     <UserCheck className="w-4 h-4 mr-2 text-gray-400" />
@@ -832,7 +1025,7 @@ export default function RehearsalDetail() {
                   </button>
                 ))}
                 <button
-                  onClick={() => handleAnnotate(activeAnnotation.face, null)}
+                  onClick={() => handleStageAnnotation(activeAnnotation.face, null)}
                   className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 rounded flex items-center"
                 >
                   <UserX className="w-4 h-4 mr-2" />

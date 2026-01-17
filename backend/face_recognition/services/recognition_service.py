@@ -222,22 +222,27 @@ class RecognitionService:
     ) -> Dict:
         """
         Manually annotate or correct a detected face.
-        
+
+        This method also updates the member's face embedding if a member is
+        specified, allowing the system to learn from manual corrections.
+
         Args:
             detected_face_id: Face ID to annotate
             member_id: Member ID (None if not a member)
             annotated_by: User ID who made the annotation
             feedback_type: 'correct', 'incorrect', 'unknown'
-            
+
         Returns:
-            Annotation result
+            Annotation result with optional registration status update
         """
-        from models.face_models import DetectedFace, RecognitionError
-        
+        from models.face_models import DetectedFace, RecognitionError, MemberPhoto, MemberFace
+        from ..core.distinguishability_checker import DistinguishabilityChecker, DistinguishabilityStatus
+        from ..core.embedding_aggregator import EmbeddingAggregator
+
         face = self.db.query(DetectedFace).get(detected_face_id)
         if not face:
             return {'success': False, 'error': '人脸不存在'}
-        
+
         # Record error if this is a correction
         if face.matched_member_id != member_id and face.match_status == 'confirmed':
             error = RecognitionError(
@@ -252,30 +257,158 @@ class RecognitionService:
                 corrected_at=datetime.utcnow()
             )
             self.db.add(error)
-        
+
         # Update face annotation
-        old_member_id = face.matched_member_id
+        old_matched_id = face.matched_member_id
+        old_annotated_id = face.annotated_member_id
+        old_match_status = face.match_status
+
         face.annotated_member_id = member_id
         face.annotated_by = annotated_by
         face.annotated_at = datetime.utcnow()
         face.annotation_type = 'admin'
         face.match_status = 'manual'
-        
-        # Update attendance if needed
-        if old_member_id != member_id:
+
+        # Update attendance
+        # For manual annotation, we need to:
+        # 1. Remove detection from old annotated member (if any)
+        # 2. Add detection to new annotated member (if any)
+        # Note: For uncertain/unmatched faces, matched_member_id was never
+        # added to attendance, so we only care about annotated_member_id
+        if old_match_status == 'confirmed' and old_matched_id:
+            # Face was auto-confirmed, need to remove from old matched member
             self._fix_attendance(
                 face.recognition,
-                old_member_id,
+                old_matched_id,
                 member_id
             )
-        
-        self.db.commit()
-        
-        return {
+        elif old_annotated_id:
+            # Face was previously manually annotated, update from old to new
+            if old_annotated_id != member_id:
+                self._fix_attendance(
+                    face.recognition,
+                    old_annotated_id,
+                    member_id
+                )
+        else:
+            # Face was uncertain/unmatched and never in attendance, just add new
+            self._fix_attendance(
+                face.recognition,
+                None,  # No old member to remove
+                member_id
+            )
+
+        result = {
             'success': True,
             'face_id': face.id,
             'annotated_member_id': member_id
         }
+
+        # Learn from annotation: add face embedding to member's data
+        if member_id and face.embedding_json:
+            embedding = json.loads(face.embedding_json)
+
+            # Check if this face was already added to member's photos
+            existing_photo = self.db.query(MemberPhoto).filter_by(
+                source_detected_face_id=face.id,
+                member_id=member_id
+            ).first()
+
+            if not existing_photo:
+                # Create MemberPhoto record
+                photo = MemberPhoto(
+                    member_id=member_id,
+                    photo_url=face.face_crop_url,
+                    source_type='group_photo',
+                    source_recognition_id=face.recognition_id,
+                    source_detected_face_id=face.id,
+                    is_self_annotated=False,
+                    face_detected=True,
+                    face_count=1,
+                    quality_score=0.7,  # Default for group photo crops
+                    is_valid=True
+                )
+                photo.set_embedding(embedding)
+                self.db.add(photo)
+
+                # Update member's aggregated embedding
+                member_face = self.db.query(MemberFace).filter_by(member_id=member_id).first()
+                if not member_face:
+                    member_face = MemberFace(member_id=member_id, status='processing')
+                    self.db.add(member_face)
+                    self.db.flush()
+
+                try:
+                    aggregated = self._aggregate_member_embedding(member_id)
+                    checker = DistinguishabilityChecker(self.db)
+                    check_result = checker.check(member_id, aggregated)
+
+                    member_face.representative_embedding = json.dumps(aggregated)
+                    member_face.photo_count = self._count_member_photos(member_id)
+                    member_face.distinguishability_score = 1.0 - check_result.max_similarity
+                    member_face.max_similarity = check_result.max_similarity
+                    member_face.most_similar_member_id = check_result.most_similar_member_id
+                    member_face.last_check_at = datetime.utcnow()
+
+                    if check_result.status == DistinguishabilityStatus.DISTINGUISHABLE:
+                        member_face.status = 'registered'
+                        if member_face.registered_at is None:
+                            member_face.registered_at = datetime.utcnow()
+                    elif check_result.status == DistinguishabilityStatus.BORDERLINE:
+                        member_face.status = 'needs_more_data'
+                    else:
+                        member_face.status = 'conflict'
+
+                    result['embedding_updated'] = True
+                    result['registration_status'] = member_face.status
+                    result['distinguishability_score'] = member_face.distinguishability_score
+
+                except Exception as e:
+                    logger.warning(f"Failed to update embedding for member {member_id}: {e}")
+                    result['embedding_updated'] = False
+
+        self.db.commit()
+
+        return result
+
+    def _aggregate_member_embedding(self, member_id: int) -> List[float]:
+        """Calculate aggregated embedding from all valid photos."""
+        from models.face_models import MemberPhoto
+        from ..core.embedding_aggregator import EmbeddingAggregator
+
+        photos = self.db.query(MemberPhoto).filter(
+            MemberPhoto.member_id == member_id,
+            MemberPhoto.is_valid == True,
+            MemberPhoto.embedding_json.isnot(None)
+        ).all()
+
+        if not photos:
+            raise ValueError("No valid photos found")
+
+        embeddings = []
+        quality_scores = []
+
+        for photo in photos:
+            embedding = photo.get_embedding()
+            if embedding:
+                embeddings.append(embedding)
+                quality_scores.append(photo.quality_score or 0.5)
+
+        if not embeddings:
+            raise ValueError("No valid embeddings found")
+
+        return EmbeddingAggregator.aggregate(
+            embeddings, quality_scores, method='weighted'
+        )
+
+    def _count_member_photos(self, member_id: int) -> int:
+        """Count valid photos for a member."""
+        from models.face_models import MemberPhoto
+
+        return self.db.query(MemberPhoto).filter(
+            MemberPhoto.member_id == member_id,
+            MemberPhoto.is_valid == True
+        ).count()
     
     def get_recognition_result(self, recognition_id: int) -> Dict:
         """Get recognition result details."""
