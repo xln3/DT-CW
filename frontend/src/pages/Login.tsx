@@ -42,8 +42,8 @@ export default function Login() {
           <div className="mx-auto h-16 w-16 bg-primary-100 rounded-full flex items-center justify-center">
             <Music className="h-10 w-10 text-primary-600" />
           </div>
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">艺术团管理系统</h2>
-          <p className="mt-2 text-sm text-gray-600">请登录管理后台</p>
+          <h2 className="mt-6 text-3xl font-bold text-gray-900">登录</h2>
+          <p className="mt-2 text-sm text-gray-600">用户名为姓名，密码为学号后六位</p>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -66,7 +66,7 @@ export default function Login() {
                 autoComplete="username"
                 required
                 className="form-input"
-                placeholder="请输入用户名"
+                placeholder="请输入姓名"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
               />
@@ -83,7 +83,7 @@ export default function Login() {
                 autoComplete="current-password"
                 required
                 className="form-input"
-                placeholder="请输入密码"
+                placeholder="请输入学号后六位"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />

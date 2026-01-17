@@ -213,13 +213,19 @@ export default function MemberList() {
       {/* Table */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="table">
+          <table className="table text-sm">
             <thead>
               <tr>
                 <th>姓名</th>
+                <th>性别</th>
                 <th>学号</th>
                 <th>院系</th>
-                <th>年级</th>
+                <th>班级</th>
+                <th>手机号</th>
+                <th>入队年份</th>
+                <th>梯队</th>
+                <th>职务</th>
+                <th>毕业</th>
                 <th>状态</th>
                 {canEdit && <th className="text-right">操作</th>}
               </tr>
@@ -227,7 +233,7 @@ export default function MemberList() {
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={canEdit ? 6 : 5} className="text-center py-8">
+                  <td colSpan={canEdit ? 12 : 11} className="text-center py-8">
                     <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
                       <span className="ml-3 text-gray-500">加载中...</span>
@@ -236,17 +242,27 @@ export default function MemberList() {
                 </tr>
               ) : members.length === 0 ? (
                 <tr>
-                  <td colSpan={canEdit ? 6 : 5} className="text-center py-8 text-gray-500">
+                  <td colSpan={canEdit ? 12 : 11} className="text-center py-8 text-gray-500">
                     暂无队员数据
                   </td>
                 </tr>
               ) : (
                 members.map((member) => (
                   <tr key={member.id} className="hover:bg-gray-50">
-                    <td className="font-medium">{member.name}</td>
+                    <td className="font-medium whitespace-nowrap">{member.name}</td>
+                    <td>{member.gender || '-'}</td>
                     <td>{member.student_id || '-'}</td>
-                    <td>{member.department || '-'}</td>
-                    <td>{member.grade || '-'}</td>
+                    <td className="max-w-32 truncate" title={member.department || ''}>{member.department || '-'}</td>
+                    <td>{member.class_name || '-'}</td>
+                    <td>{member.phone || '-'}</td>
+                    <td>{member.join_year || '-'}</td>
+                    <td>{member.team_level || '-'}</td>
+                    <td>{member.team_role || '-'}</td>
+                    <td>
+                      {member.graduating_this_semester ? (
+                        <span className="text-orange-600">是</span>
+                      ) : '-'}
+                    </td>
                     <td>
                       <span
                         className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${

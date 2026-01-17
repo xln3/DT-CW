@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { CalendarEvent, EventsByDate, Semester, WeekScheduleData } from '../../types';
-import { isTrainingPeriod, SEMESTER_TYPES } from '../../types';
+import { isTrainingPeriod } from '../../types';
 import { publicCalendarApi, publicScheduleApi } from '../../services/api';
 import MonthView from '../../components/Calendar/MonthView';
 import EventList from '../../components/Calendar/EventList';
@@ -10,8 +9,6 @@ import { WeekScheduleView } from '../../components/Schedule';
 import { AlertCircle, TrendingUp, Calendar as CalendarIcon } from 'lucide-react';
 
 const CalendarPage: React.FC = () => {
-  const navigate = useNavigate();
-
   // Semester state
   const [semester, setSemester] = useState<Semester | null>(null);
   const [semesterLoading, setSemesterLoading] = useState(true);
@@ -132,10 +129,6 @@ const CalendarPage: React.FC = () => {
     loadWeekSchedule(startDate);
   };
 
-  const getSemesterTypeLabel = (type: string) => {
-    return SEMESTER_TYPES.find(t => t.value === type)?.label || type;
-  };
-
   // Show loading while determining semester type
   if (semesterLoading) {
     return (
@@ -151,53 +144,13 @@ const CalendarPage: React.FC = () => {
   const isTraining = semester && isTrainingPeriod(semester.semester_type);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold text-gray-900">
-                  {isTraining ? '训练时间表' : '活动日历'}
-                </h1>
-                {semester && (
-                  <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-medium">
-                    {getSemesterTypeLabel(semester.semester_type)}
-                  </span>
-                )}
-              </div>
-              <p className="mt-1 text-sm text-gray-600">
-                {isTraining
-                  ? '查看本周排练安排'
-                  : '查看演出、排练和其他活动安排'}
-              </p>
-            </div>
-            <div className="flex space-x-4">
-              <button
-                onClick={() => navigate('/attendance')}
-                className="btn-secondary"
-              >
-                考勤公示
-              </button>
-              <button
-                onClick={() => navigate('/login')}
-                className="btn-primary"
-              >
-                管理后台
-              </button>
-            </div>
-          </div>
+    <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
+          <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0 mt-0.5" />
+          <span className="text-sm text-red-700">{error}</span>
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
-            <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0 mt-0.5" />
-            <span className="text-sm text-red-700">{error}</span>
-          </div>
-        )}
+      )}
 
         {/* Render based on semester type */}
         {isTraining ? (
@@ -288,7 +241,6 @@ const CalendarPage: React.FC = () => {
             </div>
           </div>
         )}
-      </main>
 
       {/* Event Detail Modal (for month view) */}
       {selectedEvent && (

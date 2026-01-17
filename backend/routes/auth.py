@@ -232,7 +232,8 @@ def update_profile():
             member.join_year = data['join_year']
         if 'team_level' in data:
             member.team_level = data['team_level'].strip() or None
-        # Note: graduating_this_semester is NOT editable by member (admin only)
+        if 'graduating_this_semester' in data:
+            member.graduating_this_semester = bool(data['graduating_this_semester'])
 
     db.session.commit()
 

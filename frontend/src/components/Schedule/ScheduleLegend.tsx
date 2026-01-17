@@ -23,9 +23,6 @@ export function ScheduleLegend({ programs, onProgramClick }: ScheduleLegendProps
             style={{ backgroundColor: program.display_color }}
           />
           <span className="text-sm font-medium text-gray-700">{program.name}</span>
-          {program.category && (
-            <span className="text-xs text-gray-400">({program.category})</span>
-          )}
         </button>
       ))}
     </div>

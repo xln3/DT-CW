@@ -23,15 +23,21 @@ export default function RehearsalList() {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Date range filter (current week by default)
+  // Date range filter (current week by default, Monday to Sunday)
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
-    d.setDate(d.getDate() - d.getDay()); // Start of week
+    // getDay() returns 0 for Sunday, we want Monday (1) as start
+    // Formula: subtract (getDay() + 6) % 7 to get Monday
+    const dayOfWeek = d.getDay();
+    const daysToMonday = (dayOfWeek + 6) % 7; // Sunday=6, Monday=0, Tuesday=1, etc.
+    d.setDate(d.getDate() - daysToMonday);
     return d.toISOString().split('T')[0];
   });
   const [dateTo, setDateTo] = useState(() => {
     const d = new Date();
-    d.setDate(d.getDate() + (6 - d.getDay())); // End of week
+    const dayOfWeek = d.getDay();
+    const daysToMonday = (dayOfWeek + 6) % 7;
+    d.setDate(d.getDate() - daysToMonday + 6); // Monday + 6 = Sunday
     return d.toISOString().split('T')[0];
   });
 

@@ -4,7 +4,7 @@ from flask import Blueprint, request, jsonify, g, send_file
 from pypinyin import lazy_pinyin
 
 from database import db
-from models import Member, AuditLog
+from models import Member, User, AuditLog
 from auth.decorators import login_required, committee_required
 from auth.permissions import Permission, check_permission
 
@@ -15,7 +15,133 @@ def _sort_members_by_pinyin(members):
         return ''.join(lazy_pinyin(m.name or ''))
     return sorted(members, key=sort_key)
 
+
+def _create_user_for_member(member):
+    """Create a user account for a member if conditions are met.
+
+    - Username: member's name
+    - Password: last 6 characters of student_id (or full student_id if < 6 chars)
+    - Role: member
+
+    Returns the created User or None if not created.
+    """
+    # Skip if no student_id (can't generate password)
+    if not member.student_id:
+        return None
+
+    # Skip if user with same username already exists
+    existing_user = User.query.filter_by(username=member.name).first()
+    if existing_user:
+        # If user exists but not linked to this member, link them
+        if existing_user.member_id is None:
+            existing_user.member_id = member.id
+            db.session.commit()
+        return existing_user
+
+    # Generate password from student_id (last 6 chars or full if shorter)
+    student_id = member.student_id.strip()
+    password = student_id[-6:] if len(student_id) >= 6 else student_id
+
+    # Create user
+    user = User(
+        username=member.name,
+        display_name=member.name,
+        role=User.ROLE_MEMBER,
+        status='active',
+        member_id=member.id,
+        email=member.email,
+        phone=member.phone,
+    )
+    user.set_password(password)
+
+    db.session.add(user)
+    db.session.commit()
+
+    return user
+
+
 members_bp = Blueprint('members', __name__)
+
+
+def _update_member_data(member, data, is_create=False):
+    """Helper to update member fields from data dict."""
+    if 'name' in data:
+        name = data['name'].strip() if isinstance(data['name'], str) else data['name']
+        if name:
+            member.name = name
+
+    if 'student_id' in data:
+        member.student_id = (data['student_id'].strip() if data['student_id'] else None)
+
+    if 'phone' in data:
+        member.phone = (data['phone'].strip() if data['phone'] else None)
+
+    if 'gender' in data:
+        member.gender = (data['gender'].strip() if data['gender'] else None)
+
+    if 'department' in data:
+        member.department = (data['department'].strip() if data['department'] else None)
+
+    if 'grade' in data:
+        member.grade = (data['grade'].strip() if data['grade'] else None)
+
+    if 'notes' in data:
+        member.notes = (data['notes'].strip() if data['notes'] else None)
+
+    if 'status' in data:
+        status = data['status'].strip() if isinstance(data['status'], str) else data['status']
+        if status in ['active', 'inactive']:
+            member.status = status
+
+    # Extended fields
+    if 'class_name' in data:
+        member.class_name = (data['class_name'].strip() if data['class_name'] else None)
+
+    if 'email' in data:
+        member.email = (data['email'].strip() if data['email'] else None)
+
+    if 'dormitory' in data:
+        member.dormitory = (data['dormitory'].strip() if data['dormitory'] else None)
+
+    if 'birth_date' in data:
+        member.birth_date = _parse_date(data['birth_date'])
+
+    if 'ethnicity' in data:
+        member.ethnicity = (data['ethnicity'].strip() if data['ethnicity'] else None)
+
+    if 'hometown' in data:
+        member.hometown = (data['hometown'].strip() if data['hometown'] else None)
+
+    if 'political_status' in data:
+        member.political_status = (data['political_status'].strip() if data['political_status'] else None)
+
+    if 'party_branch' in data:
+        member.party_branch = (data['party_branch'].strip() if data['party_branch'] else None)
+
+    if 'is_talented' in data:
+        member.is_talented = bool(data['is_talented'])
+
+    if 'is_concentrated_class' in data:
+        member.is_concentrated_class = bool(data['is_concentrated_class'])
+
+    if 'team_role' in data:
+        member.team_role = (data['team_role'].strip() if data['team_role'] else None)
+
+    if 'join_year' in data:
+        member.join_year = data['join_year']
+
+    if 'team_level' in data:
+        member.team_level = (data['team_level'].strip() if data['team_level'] else None)
+
+    if 'graduating_this_semester' in data:
+        member.graduating_this_semester = bool(data['graduating_this_semester'])
+
+    db.session.commit()
+
+    return jsonify({
+        'message': '队员更新成功' if not is_create else '队员创建成功',
+        'member': member.to_dict()
+    }), 200 if not is_create else 201
 
 
 @members_bp.route('', methods=['GET'])
@@ -59,7 +185,7 @@ def get_member(member_id):
 @members_bp.route('', methods=['POST'])
 @committee_required
 def create_member():
-    """Create a new member."""
+    """Create a new member (or update if name exists)."""
     data = request.get_json()
 
     if not data:
@@ -68,6 +194,12 @@ def create_member():
     name = data.get('name', '').strip()
     if not name:
         return jsonify({'error': '姓名不能为空'}), 400
+
+    # Check if member with same name exists - if so, update instead
+    existing = Member.query.filter_by(name=name).first()
+    if existing:
+        # Update existing member
+        return _update_member_data(existing, data, is_create=False)
 
     # Parse date field
     birth_date = None
@@ -103,6 +235,9 @@ def create_member():
     db.session.add(member)
     db.session.commit()
 
+    # Create user account for member
+    user_created = _create_user_for_member(member)
+
     # Log
     AuditLog.log(
         action=AuditLog.ACTION_CREATE,
@@ -110,12 +245,16 @@ def create_member():
         module='attendance',
         resource_type='member',
         resource_id=member.id,
-        details={'name': name},
+        details={'name': name, 'user_created': user_created is not None},
         ip_address=request.remote_addr
     )
 
+    message = '队员创建成功'
+    if user_created:
+        message += '，已自动创建登录账号（密码为学号后6位）'
+
     return jsonify({
-        'message': '队员创建成功',
+        'message': message,
         'member': member.to_dict()
     }), 201
 
@@ -379,7 +518,8 @@ def import_members_csv():
     姓名,性别,学号,院系,班级,手机号,邮箱,宿舍,出生日期,民族,...
 
     Import logic:
-    - If student_id exists and matches an existing member: update
+    - Name is the unique identifier
+    - If name exists: update existing member
     - Otherwise: create new member
     """
     import csv
@@ -408,19 +548,14 @@ def import_members_csv():
         for row in reader:
             row_num += 1
             try:
-                # Get name (required)
+                # Get name (required, used as unique identifier)
                 name = row.get('姓名', '').strip()
                 if not name:
                     errors.append(f'第{row_num}行: 姓名不能为空')
                     continue
 
-                # Get student_id for upsert logic
-                student_id = row.get('学号', '').strip() or None
-
-                # Check if member exists by student_id
-                existing_member = None
-                if student_id:
-                    existing_member = Member.query.filter_by(student_id=student_id).first()
+                # Check if member exists by name (name is unique identifier)
+                existing_member = Member.query.filter_by(name=name).first()
 
                 if existing_member:
                     # Update existing member
@@ -433,7 +568,7 @@ def import_members_csv():
 
                 # Set all fields from CSV
                 member.name = name
-                member.student_id = student_id
+                member.student_id = row.get('学号', '').strip() or None
                 member.gender = row.get('性别', '').strip() or None
                 member.department = row.get('院系', '').strip() or None
                 member.class_name = row.get('班级', '').strip() or None
@@ -471,6 +606,15 @@ def import_members_csv():
 
         db.session.commit()
 
+        # Create user accounts for all members with student_id
+        users_created = 0
+        all_members = Member.query.all()
+        for member in all_members:
+            if member.student_id and not User.query.filter_by(username=member.name).first():
+                user_account = _create_user_for_member(member)
+                if user_account:
+                    users_created += 1
+
         # Log
         AuditLog.log(
             action=AuditLog.ACTION_CREATE,
@@ -481,16 +625,22 @@ def import_members_csv():
                 'created': created_count,
                 'updated': updated_count,
                 'skipped': skipped_count,
+                'users_created': users_created,
                 'errors': len(errors)
             },
             ip_address=request.remote_addr
         )
 
+        message = f'导入完成: 创建 {created_count} 名队员, 更新 {updated_count} 名队员'
+        if users_created > 0:
+            message += f', 创建 {users_created} 个登录账号（密码为学号后6位）'
+
         return jsonify({
-            'message': f'导入完成: 创建 {created_count} 名队员, 更新 {updated_count} 名队员',
+            'message': message,
             'created_count': created_count,
             'updated_count': updated_count,
             'skipped_count': skipped_count,
+            'users_created': users_created,
             'errors': errors[:20]  # Limit error output
         })
 
@@ -500,9 +650,8 @@ def import_members_csv():
 
 
 @members_bp.route('/import-template', methods=['GET'])
-@login_required
 def get_import_template():
-    """Download CSV import template for members."""
+    """Download CSV import template for members (public access)."""
     import io
 
     template = """姓名,性别,学号,院系,班级,手机号,邮箱,宿舍,出生日期,民族,籍贯,政治面貌,党团关系所在,是否为特长生,是否为集中班,队内职务,入队年份,所在梯队,本学期毕业,年级,状态,备注

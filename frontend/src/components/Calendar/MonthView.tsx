@@ -29,7 +29,8 @@ const MonthView: React.FC<MonthViewProps> = ({
     const firstDay = new Date(year, month - 1, 1);
     const lastDay = new Date(year, month, 0);
     const daysInMonth = lastDay.getDate();
-    const startWeekday = firstDay.getDay(); // 0 = Sunday
+    // Convert to Monday-based: 0=Monday, 6=Sunday
+    const startWeekday = (firstDay.getDay() + 6) % 7;
 
     const days: Array<{ date: number; dateStr: string; isCurrentMonth: boolean }> = [];
 
@@ -69,7 +70,7 @@ const MonthView: React.FC<MonthViewProps> = ({
     return days;
   }, [year, month]);
 
-  const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+  const weekDays = ['一', '二', '三', '四', '五', '六', '日'];
 
   const today = new Date().toISOString().split('T')[0];
 

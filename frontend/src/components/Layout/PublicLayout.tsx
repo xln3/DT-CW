@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Users, Search, LogIn } from 'lucide-react';
+import { Calendar, Users, LogIn } from 'lucide-react';
 
 interface PublicLayoutProps {
   children: ReactNode;
@@ -10,9 +10,8 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', icon: Home, label: '首页' },
+    { path: '/', icon: Calendar, label: '排练时间表' },
     { path: '/attendance', icon: Users, label: '考勤总览' },
-    { path: '/attendance/search', icon: Search, label: '查询考勤' },
   ];
 
   const isActive = (path: string) => {
@@ -58,7 +57,7 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
                 className="ml-4 flex items-center px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700 transition-colors"
               >
                 <LogIn className="w-4 h-4 mr-2" />
-                管理登录
+                登录
               </Link>
             </nav>
 

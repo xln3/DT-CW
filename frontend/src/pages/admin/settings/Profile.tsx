@@ -47,6 +47,7 @@ export default function Profile() {
     team_role: '',
     join_year: undefined as number | undefined,
     team_level: '',
+    graduating_this_semester: false,
   });
 
   // Password form state
@@ -86,6 +87,7 @@ export default function Profile() {
         team_role: u.member?.team_role || '',
         join_year: u.member?.join_year,
         team_level: u.member?.team_level || '',
+        graduating_this_semester: u.member?.graduating_this_semester || false,
       });
     }
   }, [user]);
@@ -484,6 +486,16 @@ export default function Profile() {
                         />
                         <span className="text-sm text-gray-700">集中班</span>
                       </label>
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          name="graduating_this_semester"
+                          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          checked={profileForm.graduating_this_semester}
+                          onChange={handleProfileChange}
+                        />
+                        <span className="text-sm text-gray-700">本学期毕业</span>
+                      </label>
                     </div>
                   </div>
                 </>
@@ -633,6 +645,10 @@ export default function Profile() {
                   <div>
                     <dt className="text-sm font-medium text-gray-500">集中班</dt>
                     <dd className="mt-1 text-sm text-gray-900">{u.member.is_concentrated_class ? '是' : '否'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">本学期毕业</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{u.member.graduating_this_semester ? '是' : '否'}</dd>
                   </div>
                 </>
               )}

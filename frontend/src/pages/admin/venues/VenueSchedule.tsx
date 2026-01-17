@@ -28,7 +28,10 @@ export default function VenueSchedule() {
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
     const monday = new Date(today);
-    monday.setDate(today.getDate() - today.getDay() + 1);
+    // getDay() returns 0 for Sunday, use (getDay() + 6) % 7 for Monday-based week
+    const dayOfWeek = today.getDay();
+    const daysToMonday = (dayOfWeek + 6) % 7;
+    monday.setDate(today.getDate() - daysToMonday);
     return monday.toISOString().split('T')[0];
   });
   const [isLoading, setIsLoading] = useState(true);
