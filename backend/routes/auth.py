@@ -42,9 +42,9 @@ def login():
     user.last_login_at = datetime.utcnow()
     db.session.commit()
 
-    # Create tokens
-    access_token = create_access_token(identity=user.id)
-    refresh_token = create_refresh_token(identity=user.id)
+    # Create tokens (identity must be a string)
+    access_token = create_access_token(identity=str(user.id))
+    refresh_token = create_refresh_token(identity=str(user.id))
 
     # Log the login
     AuditLog.log(
@@ -67,12 +67,13 @@ def login():
 def refresh():
     """Refresh access token."""
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    # Convert back to int for database lookup
+    user = User.query.get(int(user_id))
 
     if not user or user.status != 'active':
         return jsonify({'error': '用户不存在或已被禁用'}), 401
 
-    access_token = create_access_token(identity=user_id)
+    access_token = create_access_token(identity=str(user_id))
 
     return jsonify({
         'access_token': access_token
@@ -161,6 +162,17 @@ def update_profile():
         return jsonify({'error': '请提供更新信息'}), 400
 
     # Update user fields
+    if 'username' in data:
+        new_username = data['username'].strip()
+        if new_username and new_username != user.username:
+            # Check if username is already taken
+            existing = User.query.filter_by(username=new_username).first()
+            if existing:
+                return jsonify({'error': '用户名已被使用'}), 400
+            if len(new_username) < 3:
+                return jsonify({'error': '用户名长度至少3位'}), 400
+            user.username = new_username
+
     if 'display_name' in data:
         display_name = data['display_name'].strip()
         if display_name:

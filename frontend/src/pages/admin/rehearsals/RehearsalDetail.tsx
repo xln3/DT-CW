@@ -136,6 +136,63 @@ export default function RehearsalDetail() {
         id: a.member_id,
         name: a.member_name || `Member ${a.member_id}`,
       })));
+
+      // Load saved recognition results
+      try {
+        const recognitions = await faceRecognitionApi.getRehearsalRecognitions(Number(id));
+
+        if (recognitions.check_in) {
+          setCheckInRecognition({
+            isUploading: false,
+            recognition: {
+              recognition_id: recognitions.check_in.recognition_id,
+              total_faces: recognitions.check_in.total_faces,
+              matched_count: recognitions.check_in.matched_count,
+              uncertain_count: recognitions.check_in.uncertain_count,
+              unmatched_count: recognitions.check_in.unmatched_count,
+              photo_url: recognitions.check_in.photo_url,
+            },
+            faces: recognitions.check_in.faces.map(f => ({
+              face_id: f.face_id,
+              face_crop_url: f.face_crop_url,
+              match_status: f.match_status as FaceMatchStatus,
+              matched_member_id: f.matched_member_id,
+              matched_member_name: f.matched_member_name,
+              confidence: f.confidence,
+              annotated_member_id: f.annotated_member_id,
+              annotated_member_name: f.annotated_member_name,
+            })),
+            error: null,
+          });
+        }
+
+        if (recognitions.check_out) {
+          setCheckOutRecognition({
+            isUploading: false,
+            recognition: {
+              recognition_id: recognitions.check_out.recognition_id,
+              total_faces: recognitions.check_out.total_faces,
+              matched_count: recognitions.check_out.matched_count,
+              uncertain_count: recognitions.check_out.uncertain_count,
+              unmatched_count: recognitions.check_out.unmatched_count,
+              photo_url: recognitions.check_out.photo_url,
+            },
+            faces: recognitions.check_out.faces.map(f => ({
+              face_id: f.face_id,
+              face_crop_url: f.face_crop_url,
+              match_status: f.match_status as FaceMatchStatus,
+              matched_member_id: f.matched_member_id,
+              matched_member_name: f.matched_member_name,
+              confidence: f.confidence,
+              annotated_member_id: f.annotated_member_id,
+              annotated_member_name: f.annotated_member_name,
+            })),
+            error: null,
+          });
+        }
+      } catch {
+        // Ignore errors loading recognition results - they may not exist
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || '加载失败');
     } finally {
@@ -479,9 +536,10 @@ export default function RehearsalDetail() {
       middlePresent = att.status !== 'absent';  // 非缺勤则中间参与
     }
 
-    const beforeStyle = getSegmentStyle(beforePresent, att.has_leave, att.leave_type, 'before');
-    const middleStyle = getSegmentStyle(middlePresent, att.has_leave, att.leave_type, 'middle');
-    const afterStyle = getSegmentStyle(afterPresent, att.has_leave, att.leave_type, 'after');
+    const leaveType = att.leave_type ?? null;
+    const beforeStyle = getSegmentStyle(beforePresent, att.has_leave, leaveType, 'before');
+    const middleStyle = getSegmentStyle(middlePresent, att.has_leave, leaveType, 'middle');
+    const afterStyle = getSegmentStyle(afterPresent, att.has_leave, leaveType, 'after');
 
     return (
       <div className="inline-flex items-center" title={`${beforeStyle.tooltip} | ${middleStyle.tooltip} | ${afterStyle.tooltip}`}>
@@ -953,6 +1011,23 @@ export default function RehearsalDetail() {
           </div>
         </div>
       </div>
+
+      {/* Attendance Exclusion Notice */}
+      {!rehearsal.counts_towards_attendance && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-yellow-500 mr-3 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-medium text-yellow-800">此排练不计入考勤率统计</h3>
+              {rehearsal.exclusion_reason && (
+                <p className="mt-1 text-sm text-yellow-700">
+                  原因: {rehearsal.exclusion_reason}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Notes */}
       {rehearsal.notes && (

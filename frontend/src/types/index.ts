@@ -5,7 +5,7 @@ export interface User {
   display_name: string;
   email?: string;
   phone?: string;
-  role: 'admin' | 'committee' | 'program_manager';
+  role: 'admin' | 'committee' | 'program_manager' | 'member';
   status: 'active' | 'inactive';
   last_login_at?: string;
   created_at: string;
@@ -122,6 +122,8 @@ export interface Rehearsal {
   before_photo_status: 'pending' | 'uploaded' | 'processed';
   after_photo_status: 'pending' | 'uploaded' | 'processed';
   videos: string[];
+  counts_towards_attendance: boolean;
+  exclusion_reason?: string;
   notes?: string;
   attendance_count: number;
   created_at: string;
@@ -220,6 +222,8 @@ export interface RehearsalForm {
   scheduled_end_time?: string;
   location?: string;
   notes?: string;
+  counts_towards_attendance?: boolean;
+  exclusion_reason?: string;
 }
 
 // Program categories

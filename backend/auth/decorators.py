@@ -11,24 +11,22 @@ def login_required(f):
     """Decorator to require authentication."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        try:
-            verify_jwt_in_request()
-            user_id = get_jwt_identity()
-            user = User.query.get(user_id)
+        # Let JWT errors propagate to the JWT error handlers
+        verify_jwt_in_request()
+        user_id = get_jwt_identity()
+        # Convert string identity back to int for database lookup
+        user = User.query.get(int(user_id))
 
-            if not user:
-                print(f"[AUTH] User not found: {user_id}")
-                return jsonify({'error': '用户不存在'}), 401
+        if not user:
+            print(f"[AUTH] User not found: {user_id}")
+            return jsonify({'error': '用户不存在'}), 401
 
-            if user.status != 'active':
-                print(f"[AUTH] User disabled: {user.username}")
-                return jsonify({'error': '账号已被禁用'}), 403
+        if user.status != 'active':
+            print(f"[AUTH] User disabled: {user.username}")
+            return jsonify({'error': '账号已被禁用'}), 403
 
-            g.current_user = user
-            return f(*args, **kwargs)
-        except Exception as e:
-            print(f"[AUTH] JWT error: {e}")
-            return jsonify({'error': '需要登录才能访问'}), 401
+        g.current_user = user
+        return f(*args, **kwargs)
 
     return decorated_function
 
@@ -38,30 +36,26 @@ def role_required(*roles):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            try:
-                auth_header = request.headers.get('Authorization', '')
-                print(f"[AUTH] Authorization header: {auth_header[:50]}..." if len(auth_header) > 50 else f"[AUTH] Authorization header: {auth_header}")
-                verify_jwt_in_request()
-                user_id = get_jwt_identity()
-                user = User.query.get(user_id)
+            # Let JWT errors propagate to the JWT error handlers
+            verify_jwt_in_request()
+            user_id = get_jwt_identity()
+            # Convert string identity back to int for database lookup
+            user = User.query.get(int(user_id))
 
-                if not user:
-                    print(f"[AUTH] User not found: {user_id}")
-                    return jsonify({'error': '用户不存在'}), 401
+            if not user:
+                print(f"[AUTH] User not found: {user_id}")
+                return jsonify({'error': '用户不存在'}), 401
 
-                if user.status != 'active':
-                    print(f"[AUTH] User disabled: {user.username}")
-                    return jsonify({'error': '账号已被禁用'}), 403
+            if user.status != 'active':
+                print(f"[AUTH] User disabled: {user.username}")
+                return jsonify({'error': '账号已被禁用'}), 403
 
-                if user.role not in roles:
-                    print(f"[AUTH] Role denied: {user.username} has {user.role}, needs {roles}")
-                    return jsonify({'error': '权限不足'}), 403
+            if user.role not in roles:
+                print(f"[AUTH] Role denied: {user.username} has {user.role}, needs {roles}")
+                return jsonify({'error': '权限不足'}), 403
 
-                g.current_user = user
-                return f(*args, **kwargs)
-            except Exception as e:
-                print(f"[AUTH] JWT error in role_required: {e}")
-                return jsonify({'error': '需要登录才能访问'}), 401
+            g.current_user = user
+            return f(*args, **kwargs)
 
         return decorated_function
     return decorator
@@ -72,24 +66,23 @@ def permission_required(permission: Permission):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            try:
-                verify_jwt_in_request()
-                user_id = get_jwt_identity()
-                user = User.query.get(user_id)
+            # Let JWT errors propagate to the JWT error handlers
+            verify_jwt_in_request()
+            user_id = get_jwt_identity()
+            # Convert string identity back to int for database lookup
+            user = User.query.get(int(user_id))
 
-                if not user:
-                    return jsonify({'error': '用户不存在'}), 401
+            if not user:
+                return jsonify({'error': '用户不存在'}), 401
 
-                if user.status != 'active':
-                    return jsonify({'error': '账号已被禁用'}), 403
+            if user.status != 'active':
+                return jsonify({'error': '账号已被禁用'}), 403
 
-                if not check_permission(user, permission):
-                    return jsonify({'error': '权限不足'}), 403
+            if not check_permission(user, permission):
+                return jsonify({'error': '权限不足'}), 403
 
-                g.current_user = user
-                return f(*args, **kwargs)
-            except Exception as e:
-                return jsonify({'error': '需要登录才能访问'}), 401
+            g.current_user = user
+            return f(*args, **kwargs)
 
         return decorated_function
     return decorator
@@ -106,40 +99,39 @@ def program_access_required(permission: Permission, program_id_param='program_id
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
+            # Let JWT errors propagate to the JWT error handlers
+            verify_jwt_in_request()
+            user_id = get_jwt_identity()
+            # Convert string identity back to int for database lookup
+            user = User.query.get(int(user_id))
+
+            if not user:
+                return jsonify({'error': '用户不存在'}), 401
+
+            if user.status != 'active':
+                return jsonify({'error': '账号已被禁用'}), 403
+
+            # Get program_id from various sources
+            program_id = kwargs.get(program_id_param)
+            if program_id is None:
+                program_id = request.args.get(program_id_param)
+            if program_id is None and request.is_json:
+                program_id = request.json.get(program_id_param)
+
+            if program_id is None:
+                return jsonify({'error': '缺少节目ID参数'}), 400
+
             try:
-                verify_jwt_in_request()
-                user_id = get_jwt_identity()
-                user = User.query.get(user_id)
+                program_id = int(program_id)
+            except (ValueError, TypeError):
+                return jsonify({'error': '无效的节目ID'}), 400
 
-                if not user:
-                    return jsonify({'error': '用户不存在'}), 401
+            if not check_program_permission(user, permission, program_id):
+                return jsonify({'error': '无权访问该节目'}), 403
 
-                if user.status != 'active':
-                    return jsonify({'error': '账号已被禁用'}), 403
-
-                # Get program_id from various sources
-                program_id = kwargs.get(program_id_param)
-                if program_id is None:
-                    program_id = request.args.get(program_id_param)
-                if program_id is None and request.is_json:
-                    program_id = request.json.get(program_id_param)
-
-                if program_id is None:
-                    return jsonify({'error': '缺少节目ID参数'}), 400
-
-                try:
-                    program_id = int(program_id)
-                except (ValueError, TypeError):
-                    return jsonify({'error': '无效的节目ID'}), 400
-
-                if not check_program_permission(user, permission, program_id):
-                    return jsonify({'error': '无权访问该节目'}), 403
-
-                g.current_user = user
-                g.program_id = program_id
-                return f(*args, **kwargs)
-            except Exception as e:
-                return jsonify({'error': '需要登录才能访问'}), 401
+            g.current_user = user
+            g.program_id = program_id
+            return f(*args, **kwargs)
 
         return decorated_function
     return decorator

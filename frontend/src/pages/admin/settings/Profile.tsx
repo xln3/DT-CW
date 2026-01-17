@@ -24,6 +24,7 @@ export default function Profile() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [profileForm, setProfileForm] = useState({
+    username: '',
     display_name: '',
     email: '',
     phone: '',
@@ -48,6 +49,7 @@ export default function Profile() {
     if (user) {
       const u = user as UserWithMember;
       setProfileForm({
+        username: u.username || '',
         display_name: u.display_name || '',
         email: u.email || '',
         phone: u.phone || '',
@@ -190,11 +192,12 @@ export default function Profile() {
                   <label className="form-label">用户名</label>
                   <input
                     type="text"
-                    className="form-input bg-gray-100"
-                    value={u?.username || ''}
-                    disabled
+                    name="username"
+                    className="form-input"
+                    value={profileForm.username}
+                    onChange={handleProfileChange}
+                    placeholder="登录用户名（至少3位）"
                   />
-                  <p className="text-xs text-gray-500 mt-1">用户名不可修改</p>
                 </div>
                 <div>
                   <label className="form-label">显示名称</label>

@@ -28,6 +28,10 @@ class Rehearsal(db.Model):
     # Videos (JSON array of video links/paths)
     videos = db.Column(db.Text)
 
+    # Attendance calculation settings
+    counts_towards_attendance = db.Column(db.Boolean, default=True)  # Whether this rehearsal counts towards attendance rate
+    exclusion_reason = db.Column(db.Text)  # Reason for excluding from attendance calculation
+
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -77,6 +81,8 @@ class Rehearsal(db.Model):
             'before_photo_status': self.before_photo_status,
             'after_photo_status': self.after_photo_status,
             'videos': self.get_videos(),
+            'counts_towards_attendance': self.counts_towards_attendance if self.counts_towards_attendance is not None else True,
+            'exclusion_reason': self.exclusion_reason,
             'notes': self.notes,
             'attendance_count': self.attendance_records.count(),
             'created_at': self.created_at.isoformat() if self.created_at else None,

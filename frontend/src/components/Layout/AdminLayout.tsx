@@ -21,20 +21,27 @@ interface NavItem {
   name: string;
   path: string;
   icon: React.ReactNode;
-  permissions?: string[];
+  roles?: string[];  // Allowed roles for this nav item
 }
 
 const navItems: NavItem[] = [
-  { name: '仪表盘', path: '/admin', icon: <LayoutDashboard className="w-5 h-5" /> },
+  {
+    name: '仪表盘',
+    path: '/admin',
+    icon: <LayoutDashboard className="w-5 h-5" />,
+    roles: ['admin', 'committee', 'program_manager'],
+  },
   {
     name: '队员管理',
     path: '/admin/members',
     icon: <Users className="w-5 h-5" />,
+    roles: ['admin', 'committee', 'program_manager'],
   },
   {
     name: '教师管理',
     path: '/admin/teachers',
     icon: <UserCheck className="w-5 h-5" />,
+    roles: ['admin', 'committee'],
   },
   {
     name: '节目管理',
@@ -50,21 +57,25 @@ const navItems: NavItem[] = [
     name: '队历管理',
     path: '/admin/calendar',
     icon: <Calendar className="w-5 h-5" />,
+    roles: ['admin', 'committee', 'program_manager'],
   },
   {
     name: '场地管理',
     path: '/admin/venues',
     icon: <MapPin className="w-5 h-5" />,
+    roles: ['admin', 'committee'],
   },
   {
     name: '预算管理',
     path: '/admin/budget',
     icon: <DollarSign className="w-5 h-5" />,
+    roles: ['admin', 'committee'],
   },
   {
     name: '系统设置',
     path: '/admin/settings',
     icon: <Settings className="w-5 h-5" />,
+    roles: ['admin', 'committee'],
   },
 ];
 
@@ -73,7 +84,7 @@ export default function AdminLayout() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, hasPermission } = useAuth();
+  const { user, logout } = useAuth();
 
   const handleLogout = async () => {
     await logout();
@@ -81,8 +92,8 @@ export default function AdminLayout() {
   };
 
   const filteredNavItems = navItems.filter((item) => {
-    if (!item.permissions) return true;
-    return item.permissions.some((p) => hasPermission(p));
+    if (!item.roles) return true;  // No role restriction
+    return user?.role && item.roles.includes(user.role);
   });
 
   return (
@@ -179,7 +190,9 @@ export default function AdminLayout() {
                             ? '管理员'
                             : user?.role === 'committee'
                             ? '队委'
-                            : '节目负责人'}
+                            : user?.role === 'program_manager'
+                            ? '节目负责人'
+                            : '队员'}
                         </span>
                       </div>
                       <Link

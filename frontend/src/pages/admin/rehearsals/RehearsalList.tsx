@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Calendar, Clock, MapPin, Users, Edit2, Trash2, AlertCircle, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
+import { Plus, Calendar, Clock, MapPin, Users, Edit2, Trash2, AlertCircle, ChevronLeft, ChevronRight, XCircle, Upload, Download } from 'lucide-react';
 import { rehearsalsApi, programsApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { Rehearsal, Program } from '../../../types';
@@ -13,6 +13,15 @@ export default function RehearsalList() {
   const [programFilter, setProgramFilter] = useState<number | ''>('');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState<number | null>(null);
+
+  // Import state
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    success: boolean;
+    created?: number;
+    errors?: string[];
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Date range filter (current week by default)
   const [dateFrom, setDateFrom] = useState(() => {
@@ -84,6 +93,41 @@ export default function RehearsalList() {
     }
   };
 
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportResult(null);
+    setError('');
+
+    try {
+      const result = await rehearsalsApi.importCsv(file);
+      setImportResult({
+        success: true,
+        created: result.created_count,
+        errors: result.errors,
+      });
+      // Refresh the list
+      fetchRehearsals();
+    } catch (err: any) {
+      setImportResult({
+        success: false,
+        errors: [err.response?.data?.error || '导入失败'],
+      });
+    } finally {
+      setIsImporting(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    window.open(rehearsalsApi.downloadTemplate(), '_blank');
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'cancelled':
@@ -135,10 +179,35 @@ export default function RehearsalList() {
           <p className="mt-1 text-sm text-gray-500">管理排练安排和考勤</p>
         </div>
         {canCreate && (
-          <Link to="/admin/rehearsals/new" className="btn-primary">
-            <Plus className="w-4 h-4 mr-2" />
-            创建排练
-          </Link>
+          <div className="flex items-center space-x-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImport}
+              accept=".csv"
+              className="hidden"
+            />
+            <button
+              onClick={handleDownloadTemplate}
+              className="btn-secondary"
+              title="下载导入模板"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              模板
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="btn-secondary"
+              disabled={isImporting}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {isImporting ? '导入中...' : '导入'}
+            </button>
+            <Link to="/admin/rehearsals/new" className="btn-primary">
+              <Plus className="w-4 h-4 mr-2" />
+              创建排练
+            </Link>
+          </div>
         )}
       </div>
 
@@ -198,6 +267,39 @@ export default function RehearsalList() {
         <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
           <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />
           <span className="text-sm text-red-700">{error}</span>
+        </div>
+      )}
+
+      {/* Import result */}
+      {importResult && (
+        <div className={`border rounded-md p-4 ${importResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              {importResult.success ? (
+                <p className="text-sm text-green-700">
+                  成功导入 {importResult.created} 条排练记录
+                  {importResult.errors && importResult.errors.length > 0 && (
+                    <span className="text-yellow-700">（部分行有错误）</span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-sm text-red-700">导入失败</p>
+              )}
+              {importResult.errors && importResult.errors.length > 0 && (
+                <ul className="mt-2 text-sm text-gray-600 list-disc list-inside">
+                  {importResult.errors.map((err, idx) => (
+                    <li key={idx}>{err}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <button
+              onClick={() => setImportResult(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       )}
 

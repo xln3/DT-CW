@@ -25,6 +25,10 @@ export default function RehearsalForm() {
     notes: '',
   });
 
+  // Attendance exclusion settings (only for edit mode)
+  const [countsTowardsAttendance, setCountsTowardsAttendance] = useState(true);
+  const [exclusionReason, setExclusionReason] = useState('');
+
   useEffect(() => {
     fetchOptions();
     if (isEdit) {
@@ -58,6 +62,8 @@ export default function RehearsalForm() {
         location: rehearsal.location || '',
         notes: rehearsal.notes || '',
       });
+      setCountsTowardsAttendance(rehearsal.counts_towards_attendance);
+      setExclusionReason(rehearsal.exclusion_reason || '');
     } catch (err: any) {
       setError(err.response?.data?.error || '加载失败');
     } finally {
@@ -92,7 +98,12 @@ export default function RehearsalForm() {
     setIsSaving(true);
     try {
       if (isEdit) {
-        await rehearsalsApi.update(Number(id), form);
+        // Include attendance exclusion settings when editing
+        await rehearsalsApi.update(Number(id), {
+          ...form,
+          counts_towards_attendance: countsTowardsAttendance,
+          exclusion_reason: !countsTowardsAttendance ? exclusionReason : undefined,
+        });
       } else {
         await rehearsalsApi.create(form);
       }
@@ -254,6 +265,53 @@ export default function RehearsalForm() {
               onChange={handleChange}
             />
           </div>
+
+          {/* Attendance exclusion settings - only show in edit mode */}
+          {isEdit && (
+            <div className="border-t pt-6 mt-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">考勤设置</h3>
+              <div className="space-y-4">
+                <div className="flex items-start">
+                  <div className="flex items-center h-5">
+                    <input
+                      id="counts_towards_attendance"
+                      type="checkbox"
+                      checked={countsTowardsAttendance}
+                      onChange={(e) => setCountsTowardsAttendance(e.target.checked)}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    />
+                  </div>
+                  <div className="ml-3 text-sm">
+                    <label htmlFor="counts_towards_attendance" className="font-medium text-gray-700">
+                      计入考勤率
+                    </label>
+                    <p className="text-gray-500">
+                      此排练的出勤情况是否计入成员和节目的整体考勤率统计
+                    </p>
+                  </div>
+                </div>
+
+                {!countsTowardsAttendance && (
+                  <div className="ml-7">
+                    <label htmlFor="exclusion_reason" className="form-label">
+                      不计入考勤的原因 <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      id="exclusion_reason"
+                      rows={2}
+                      className="form-input"
+                      placeholder="例如: 临时加课、补充排练、非正式活动等"
+                      value={exclusionReason}
+                      onChange={(e) => setExclusionReason(e.target.value)}
+                    />
+                    <p className="mt-1 text-sm text-gray-500">
+                      请说明为什么此排练不计入考勤率统计
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-4 bg-gray-50 border-t flex justify-end space-x-3">

@@ -20,6 +20,8 @@ class Config:
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-key-change-in-production')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=8)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
+    JWT_TOKEN_LOCATION = ['headers']  # Only accept tokens in headers
+    JWT_COOKIE_CSRF_PROTECT = False  # Disable CSRF protection for API-only usage
 
     # Upload
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')

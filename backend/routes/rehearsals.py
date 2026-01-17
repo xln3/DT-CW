@@ -1,10 +1,10 @@
 """Rehearsal management routes."""
 from datetime import datetime
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, send_file
 
 from database import db
 from models import Rehearsal, Program, Teacher, Attendance, AuditLog
-from auth.decorators import login_required
+from auth.decorators import login_required, committee_required
 from auth.permissions import Permission, check_program_permission
 
 rehearsals_bp = Blueprint('rehearsals', __name__)
@@ -213,6 +213,17 @@ def update_rehearsal(rehearsal_id):
         if data['status'] in ['scheduled', 'completed', 'cancelled']:
             rehearsal.status = data['status']
 
+    if 'counts_towards_attendance' in data:
+        rehearsal.counts_towards_attendance = bool(data['counts_towards_attendance'])
+        if not rehearsal.counts_towards_attendance:
+            # When excluding from attendance, require a reason
+            exclusion_reason = data.get('exclusion_reason', '').strip()
+            if not exclusion_reason:
+                return jsonify({'error': '排除考勤计算时必须填写原因'}), 400
+            rehearsal.exclusion_reason = exclusion_reason
+        else:
+            rehearsal.exclusion_reason = None
+
     db.session.commit()
 
     # Log
@@ -335,3 +346,176 @@ def _init_attendance_records(rehearsal):
         )
         db.session.add(record)
     db.session.commit()
+
+
+@rehearsals_bp.route('/import-csv', methods=['POST'])
+@committee_required
+def import_rehearsals_csv():
+    """Import rehearsals from CSV file.
+
+    CSV format:
+    日期,节目名称,开始时间,结束时间,地点,教师,备注
+    2024-01-15,测试舞蹈,09:00,11:00,舞蹈排练厅A,李老师,
+    2024-01-16,测试舞蹈,14:00,16:00,舞蹈排练厅B,,第一次排练
+    """
+    import csv
+    import io
+
+    if 'file' not in request.files:
+        return jsonify({'error': '请上传CSV文件'}), 400
+
+    file = request.files['file']
+    if not file.filename.endswith('.csv'):
+        return jsonify({'error': '请上传CSV格式文件'}), 400
+
+    user = g.current_user
+
+    try:
+        # Read and decode CSV
+        content = file.read().decode('utf-8-sig')  # Handle BOM
+        reader = csv.DictReader(io.StringIO(content))
+
+        created_count = 0
+        skipped_count = 0
+        errors = []
+        row_num = 1  # Header is row 0
+
+        for row in reader:
+            row_num += 1
+            try:
+                # Parse date
+                date_str = row.get('日期', '').strip()
+                if not date_str:
+                    errors.append(f'第{row_num}行: 日期不能为空')
+                    continue
+
+                try:
+                    scheduled_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    errors.append(f'第{row_num}行: 日期格式错误，应为 YYYY-MM-DD')
+                    continue
+
+                # Find program
+                program_name = row.get('节目名称', '').strip()
+                if not program_name:
+                    errors.append(f'第{row_num}行: 节目名称不能为空')
+                    continue
+
+                program = Program.query.filter_by(name=program_name, status='active').first()
+                if not program:
+                    errors.append(f'第{row_num}行: 找不到节目 "{program_name}"')
+                    continue
+
+                # Parse times
+                start_time = None
+                end_time = None
+                start_time_str = row.get('开始时间', '').strip()
+                end_time_str = row.get('结束时间', '').strip()
+
+                if start_time_str:
+                    try:
+                        start_time = datetime.strptime(start_time_str, '%H:%M').time()
+                    except ValueError:
+                        errors.append(f'第{row_num}行: 开始时间格式错误，应为 HH:MM')
+                        continue
+
+                if end_time_str:
+                    try:
+                        end_time = datetime.strptime(end_time_str, '%H:%M').time()
+                    except ValueError:
+                        errors.append(f'第{row_num}行: 结束时间格式错误，应为 HH:MM')
+                        continue
+
+                # Find teacher (optional)
+                teacher_id = None
+                teacher_name = row.get('教师', '').strip()
+                if teacher_name:
+                    teacher = Teacher.query.filter_by(name=teacher_name, status='active').first()
+                    if teacher:
+                        teacher_id = teacher.id
+
+                # Check for duplicate
+                existing = Rehearsal.query.filter_by(
+                    program_id=program.id,
+                    scheduled_date=scheduled_date
+                ).first()
+
+                if existing:
+                    skipped_count += 1
+                    continue
+
+                # Create rehearsal
+                location = row.get('地点', '').strip() or None
+                notes = row.get('备注', '').strip() or None
+
+                rehearsal = Rehearsal(
+                    program_id=program.id,
+                    teacher_id=teacher_id,
+                    scheduled_date=scheduled_date,
+                    scheduled_start_time=start_time,
+                    scheduled_end_time=end_time,
+                    location=location,
+                    notes=notes,
+                    status='scheduled'
+                )
+                db.session.add(rehearsal)
+                db.session.flush()  # Get ID for attendance init
+
+                # Initialize attendance records
+                _init_attendance_records(rehearsal)
+                created_count += 1
+
+            except Exception as e:
+                errors.append(f'第{row_num}行: 处理错误 - {str(e)}')
+                continue
+
+        db.session.commit()
+
+        # Log
+        AuditLog.log(
+            action=AuditLog.ACTION_CREATE,
+            user=user,
+            module='attendance',
+            resource_type='rehearsal_import',
+            details={
+                'created': created_count,
+                'skipped': skipped_count,
+                'errors': len(errors)
+            },
+            ip_address=request.remote_addr
+        )
+
+        return jsonify({
+            'message': f'导入完成: 创建 {created_count} 个排练, 跳过 {skipped_count} 个重复',
+            'created_count': created_count,
+            'skipped_count': skipped_count,
+            'errors': errors[:20]  # Limit error output
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'CSV解析错误: {str(e)}'}), 400
+
+
+@rehearsals_bp.route('/import-template', methods=['GET'])
+@login_required
+def get_import_template():
+    """Download CSV import template."""
+    import io
+
+    template = """日期,节目名称,开始时间,结束时间,地点,教师,备注
+2024-01-15,示例舞蹈节目,09:00,11:00,舞蹈排练厅A,张老师,
+2024-01-16,示例舞蹈节目,14:00,16:00,舞蹈排练厅B,,第二次排练
+2024-01-17,另一个节目,19:00,21:00,多功能厅,,晚间排练"""
+
+    output = io.BytesIO()
+    output.write('\ufeff'.encode('utf-8'))  # BOM for Excel
+    output.write(template.encode('utf-8'))
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name='rehearsal_import_template.csv'
+    )

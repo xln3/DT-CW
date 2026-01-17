@@ -221,7 +221,7 @@ def select_myself():
 # ============================================
 
 @face_bp.route('/recognize', methods=['POST'])
-@role_required('admin', 'committee', 'manager')
+@role_required('admin', 'committee', 'program_manager')
 def recognize_group_photo():
     """
     Recognize faces in a group photo.
@@ -270,7 +270,7 @@ def recognize_group_photo():
 
 
 @face_bp.route('/annotate', methods=['POST'])
-@role_required('admin', 'committee', 'manager')
+@role_required('admin', 'committee', 'program_manager')
 def annotate_face():
     """Manually annotate or correct a detected face."""
     from face_recognition.services import RecognitionService
@@ -300,17 +300,61 @@ def annotate_face():
 
 
 @face_bp.route('/recognition/<int:recognition_id>', methods=['GET'])
-@role_required('admin', 'committee', 'manager')
+@role_required('admin', 'committee', 'program_manager')
 def get_recognition_result(recognition_id):
     """Get recognition result details."""
     from face_recognition.services import RecognitionService
-    
+
     service = RecognitionService()
     result = service.get_recognition_result(recognition_id)
-    
+
     if 'error' in result:
         return jsonify(result), 404
-    
+
+    return jsonify(result)
+
+
+@face_bp.route('/rehearsal/<int:rehearsal_id>/recognitions', methods=['GET'])
+@role_required('admin', 'committee', 'program_manager')
+def get_rehearsal_recognitions(rehearsal_id):
+    """Get all recognition results for a rehearsal."""
+    from models.face_models import PhotoRecognition
+
+    recognitions = PhotoRecognition.query.filter_by(
+        rehearsal_id=rehearsal_id,
+        status='completed'
+    ).all()
+
+    result = {
+        'check_in': None,
+        'check_out': None
+    }
+
+    for recognition in recognitions:
+        photo_type = recognition.photo_type
+        if photo_type in result:
+            result[photo_type] = {
+                'recognition_id': recognition.id,
+                'photo_url': recognition.photo_url,
+                'total_faces': recognition.total_faces,
+                'matched_count': recognition.matched_faces,
+                'uncertain_count': recognition.uncertain_faces,
+                'unmatched_count': recognition.unmatched_faces,
+                'faces': [
+                    {
+                        'face_id': face.id,
+                        'face_crop_url': face.face_crop_url,
+                        'match_status': face.match_status,
+                        'matched_member_id': face.matched_member_id,
+                        'matched_member_name': face.matched_member.name if face.matched_member else None,
+                        'confidence': face.match_confidence,
+                        'annotated_member_id': face.annotated_member_id,
+                        'annotated_member_name': face.annotated_member.name if face.annotated_member else None,
+                    }
+                    for face in recognition.detected_faces
+                ]
+            }
+
     return jsonify(result)
 
 
@@ -319,7 +363,7 @@ def get_recognition_result(recognition_id):
 # ============================================
 
 @face_bp.route('/members-status', methods=['GET'])
-@role_required('admin', 'committee', 'manager')
+@role_required('admin', 'committee', 'program_manager')
 def get_members_status():
     """Get face registration status for all or filtered members."""
     from models.face_models import MemberFace

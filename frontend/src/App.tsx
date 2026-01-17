@@ -9,6 +9,7 @@ import PublicLayout from './components/Layout/PublicLayout';
 // Pages
 import Login from './pages/Login';
 import Dashboard from './pages/admin/Dashboard';
+import MemberHome from './pages/admin/MemberHome';
 import { MemberList, MemberForm } from './pages/admin/members';
 import { TeacherList, TeacherForm, TeacherApplications, TeacherPayments } from './pages/admin/teachers';
 import { ProgramList, ProgramForm, ProgramDetail } from './pages/admin/programs';
@@ -61,6 +62,15 @@ function PublicLayoutWrapper() {
   );
 }
 
+// Admin home router - shows different home based on role
+function AdminHome() {
+  const { user } = useAuth();
+  if (user?.role === 'member') {
+    return <MemberHome />;
+  }
+  return <Dashboard />;
+}
+
 
 function App() {
   return (
@@ -82,7 +92,7 @@ function App() {
             {/* Protected admin routes */}
             <Route element={<ProtectedRoute />}>
               <Route element={<AdminLayout />}>
-                <Route path="/admin" element={<Dashboard />} />
+                <Route path="/admin" element={<AdminHome />} />
 
                 {/* Members */}
                 <Route path="/admin/members" element={<MemberList />} />

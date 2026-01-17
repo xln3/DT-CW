@@ -89,7 +89,11 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Check error type from response
+    const errorData = error.response?.data as { error?: string; message?: string } | undefined;
+    const isTokenExpired = error.response?.status === 401 && errorData?.error === 'token_expired';
+
+    if (isTokenExpired && !originalRequest._retry) {
       originalRequest._retry = true;
 
       const { refreshToken } = getTokens();
@@ -115,9 +119,19 @@ api.interceptors.response.use(
         // No refresh token, clear everything and redirect to login
         clearTokens();
         window.location.href = '/login';
+        return Promise.reject(error);
       }
     }
 
+    // For authorization_required (missing token), redirect to login
+    if (error.response?.status === 401 && errorData?.error === 'authorization_required') {
+      clearTokens();
+      window.location.href = '/login';
+      return Promise.reject(error);
+    }
+
+    // For other 401 errors (invalid_token, etc.), let the error propagate
+    // so the UI can display the error message
     return Promise.reject(error);
   }
 );
@@ -153,6 +167,7 @@ export const authApi = {
   },
 
   updateProfile: async (data: {
+    username?: string;
     display_name?: string;
     email?: string;
     phone?: string;
@@ -377,6 +392,24 @@ export const rehearsalsApi = {
       data
     );
     return response.data.attendance;
+  },
+
+  importCsv: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post<{
+      message: string;
+      created_count: number;
+      skipped_count: number;
+      errors: string[];
+    }>('/admin/rehearsals/import-csv', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  downloadTemplate: () => {
+    return `${api.defaults.baseURL}/admin/rehearsals/import-template`;
   },
 };
 
@@ -1132,6 +1165,49 @@ export const faceRecognitionApi = {
         avg_match_rate: number;
       };
     }>('/face/stats/overview');
+    return response.data;
+  },
+
+  // Get saved recognition results for a rehearsal
+  getRehearsalRecognitions: async (rehearsalId: number) => {
+    const response = await api.get<{
+      check_in: {
+        recognition_id: number;
+        photo_url: string;
+        total_faces: number;
+        matched_count: number;
+        uncertain_count: number;
+        unmatched_count: number;
+        faces: {
+          face_id: number;
+          face_crop_url: string;
+          match_status: string;
+          matched_member_id: number | null;
+          matched_member_name: string | null;
+          confidence: number | null;
+          annotated_member_id?: number;
+          annotated_member_name?: string;
+        }[];
+      } | null;
+      check_out: {
+        recognition_id: number;
+        photo_url: string;
+        total_faces: number;
+        matched_count: number;
+        uncertain_count: number;
+        unmatched_count: number;
+        faces: {
+          face_id: number;
+          face_crop_url: string;
+          match_status: string;
+          matched_member_id: number | null;
+          matched_member_name: string | null;
+          confidence: number | null;
+          annotated_member_id?: number;
+          annotated_member_name?: string;
+        }[];
+      } | null;
+    }>(`/face/rehearsal/${rehearsalId}/recognitions`);
     return response.data;
   },
 };

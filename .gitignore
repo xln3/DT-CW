@@ -42,3 +42,6 @@ build/
 
 # Uploaded files
 backend/uploads/
+
+# InsightFace models (large files)
+backend/models/insightface/models/
