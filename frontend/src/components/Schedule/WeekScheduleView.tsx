@@ -11,6 +11,7 @@ interface WeekScheduleViewProps {
 }
 
 const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+const WEEKDAY_NAMES_SHORT = ['日', '一', '二', '三', '四', '五', '六'];
 
 function parseTime(timeStr: string | undefined): number {
   if (!timeStr) return 0;
@@ -23,11 +24,12 @@ function formatTime(timeStr: string | undefined): string {
   return timeStr.slice(0, 5);
 }
 
-function getDateInfo(dateStr: string): { dayOfWeek: string; monthDay: string } {
+function getDateInfo(dateStr: string): { dayOfWeek: string; dayOfWeekShort: string; monthDay: string } {
   const date = new Date(dateStr);
   const dayIndex = date.getDay();
   return {
     dayOfWeek: WEEKDAY_NAMES[dayIndex],
+    dayOfWeekShort: WEEKDAY_NAMES_SHORT[dayIndex],
     monthDay: `${date.getMonth() + 1}/${date.getDate()}`,
   };
 }
@@ -198,21 +200,40 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
     const columnWidth = 100 / event.totalColumns;
     const left = event.column * columnWidth;
 
+    // Estimate available width per column (assume ~50px per column on mobile, ~80px on desktop)
+    const isNarrow = event.totalColumns >= 2;
+    const isVeryNarrow = event.totalColumns >= 3;
+
     // Determine font size based on available height AND column count
-    // Height thresholds: Small < 30px, Medium 30-50px, Large > 50px
-    // Column penalty: reduce one level for 2 cols, two levels for 3+ cols
     const getHeightLevel = () => {
-      if (heightPx < 30) return 0; // xs
-      if (heightPx < 50) return 1; // sm
+      if (heightPx < 25) return 0; // xs
+      if (heightPx < 40) return 1; // sm
       return 2; // base
     };
-    const columnPenalty = event.totalColumns >= 3 ? 2 : event.totalColumns >= 2 ? 1 : 0;
+    const columnPenalty = isVeryNarrow ? 2 : isNarrow ? 1 : 0;
     const effectiveLevel = Math.max(0, getHeightLevel() - columnPenalty);
-    const fontSizeClass = effectiveLevel === 0 ? 'text-xs' : effectiveLevel === 1 ? 'text-sm' : 'text-base';
+    const fontSizeClass = effectiveLevel === 0 ? 'text-[10px]' : effectiveLevel === 1 ? 'text-xs' : 'text-sm';
 
-    // Determine if we have space for additional info (consider columns)
-    const showTime = heightPx >= 40 && event.totalColumns <= 2;
-    const showLocation = heightPx >= 60 && event.location && event.totalColumns === 1;
+    // Priority: Time > Name > Location
+    // Time: always show if height >= 25px (lowered threshold)
+    const showTime = heightPx >= 25;
+    // Location: only show if plenty of space and single column
+    const showLocation = heightPx >= 50 && event.location && !isNarrow;
+
+    // Truncate name based on available space
+    const fullName = event.title || event.program_name || '';
+    const getDisplayName = () => {
+      if (isVeryNarrow) return fullName.slice(0, 1); // Very narrow: 1 char
+      if (isNarrow) return fullName.slice(0, 2); // Narrow: 2 chars
+      if (heightPx < 35) return fullName.slice(0, 3); // Short height: 3 chars
+      return fullName; // Full name
+    };
+    const displayName = getDisplayName();
+
+    // Truncate location to first char if narrow
+    const displayLocation = event.location
+      ? (isNarrow ? event.location.slice(0, 1) : event.location)
+      : '';
 
     // Event type indicator (calendar event vs rehearsal)
     const isCalendarEvent = event.event_type !== undefined;
@@ -227,22 +248,22 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
         style={{
           top: `${top}%`,
           height: `${Math.max(height, 3)}%`,
-          left: `calc(${left}% + 2px)`,
-          width: `calc(${columnWidth}% - 4px)`,
+          left: `calc(${left}% + 1px)`,
+          width: `calc(${columnWidth}% - 2px)`,
           backgroundColor: event.program_color || '#6B7280',
         }}
       >
-        <div className={`px-1 h-full flex flex-col justify-center text-white ${fontSizeClass}`}>
-          <span className="font-semibold truncate leading-tight">
-            {event.title || event.program_name}
+        <div className={`px-0.5 h-full flex flex-col justify-center text-white ${fontSizeClass} overflow-hidden`}>
+          <span className="font-semibold leading-tight whitespace-nowrap overflow-hidden">
+            {displayName}
           </span>
           {showTime && (
-            <span className="text-white/80 truncate leading-tight">
+            <span className="text-white/90 leading-tight break-all">
               {formatTime(event.start_time)}-{formatTime(event.end_time)}
             </span>
           )}
           {showLocation && (
-            <span className="text-white/70 truncate leading-tight">{event.location}</span>
+            <span className="text-white/70 leading-tight whitespace-nowrap overflow-hidden">{displayLocation}</span>
           )}
         </div>
       </div>
@@ -252,44 +273,44 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
   return (
     <div className={`flex flex-col bg-white rounded-lg shadow-sm ${fixedMode ? '' : 'h-full'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between p-2 sm:p-4 border-b">
         {fixedMode ? (
           // Fixed mode: just show title, no navigation
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-sm sm:text-lg font-semibold text-gray-900">
             {data.semester.name}
           </h2>
         ) : (
           // Normal mode: show navigation
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <button
               onClick={handlePrevWeek}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-sm sm:text-lg font-semibold text-gray-900">
               {data.week_start} ~ {data.week_end}
             </h2>
             <button
               onClick={handleNextWeek}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
           </div>
         )}
-        <div className="text-sm text-gray-500">
+        <div className="text-[10px] sm:text-sm text-gray-500 hidden sm:block">
           {data.week_start} ~ {data.week_end}
         </div>
       </div>
 
       {/* Legend */}
       {data.programs.length > 0 && (
-        <div className="p-4 border-b">
+        <div className="p-2 sm:p-4 border-b">
           <ScheduleLegend programs={data.programs} />
         </div>
       )}
@@ -299,21 +320,22 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
         <div className={fixedMode ? '' : 'min-w-[800px]'}>
           {/* Day Headers */}
           <div className="flex border-b sticky top-0 bg-white z-10">
-            <div className="w-14 flex-shrink-0 p-2 border-r" />
+            <div className="w-8 sm:w-14 flex-shrink-0 p-1 sm:p-2 border-r" />
             {dates.map((date) => {
-              const { dayOfWeek, monthDay } = getDateInfo(date);
+              const { dayOfWeek, dayOfWeekShort, monthDay } = getDateInfo(date);
               const isToday = date === new Date().toISOString().split('T')[0];
               return (
                 <div
                   key={date}
-                  className={`flex-1 p-2 text-center border-r last:border-r-0 ${
+                  className={`flex-1 p-1 sm:p-2 text-center border-r last:border-r-0 ${
                     isToday ? 'bg-blue-50' : ''
                   }`}
                 >
-                  <div className={`font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
-                    {dayOfWeek}
+                  <div className={`text-xs sm:text-base font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
+                    <span className="sm:hidden">{dayOfWeekShort}</span>
+                    <span className="hidden sm:inline">{dayOfWeek}</span>
                   </div>
-                  <div className={`text-sm ${isToday ? 'text-blue-500' : 'text-gray-500'}`}>
+                  <div className={`text-[10px] sm:text-sm ${isToday ? 'text-blue-500' : 'text-gray-500'}`}>
                     {monthDay}
                   </div>
                 </div>
@@ -324,21 +346,25 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
           {/* Time Grid */}
           <div className="flex relative" style={{ height: fixedMode ? `${gridHeight}px` : `${timeSlots.length * 60}px` }}>
             {/* Time Labels - using absolute positioning for accurate alignment */}
-            <div className="w-14 flex-shrink-0 border-r relative">
-              {timeSlots.map((time, i) => (
-                <div
-                  key={time}
-                  className="absolute text-xs text-gray-500 text-right pr-2 font-medium"
-                  style={{
-                    top: `${i * hourHeight}px`,
-                    transform: 'translateY(-50%)',
-                    right: 0,
-                    left: 0,
-                  }}
-                >
-                  {time}
-                </div>
-              ))}
+            <div className="w-8 sm:w-14 flex-shrink-0 border-r relative">
+              {timeSlots.map((time, i) => {
+                const hour = time.split(':')[0];
+                return (
+                  <div
+                    key={time}
+                    className="absolute text-[10px] sm:text-xs text-gray-500 text-right pr-0.5 sm:pr-2 font-medium"
+                    style={{
+                      top: `${i * hourHeight}px`,
+                      transform: 'translateY(-50%)',
+                      right: 0,
+                      left: 0,
+                    }}
+                  >
+                    <span className="sm:hidden">{parseInt(hour, 10)}</span>
+                    <span className="hidden sm:inline">{time}</span>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Day Columns */}
@@ -364,12 +390,12 @@ export function WeekScheduleView({ data, onEventClick, onWeekChange, fixedMode =
 
                   {/* All-day events banner at top */}
                   {allDayEvents.length > 0 && (
-                    <div className="absolute top-0 left-0 right-0 z-10 p-1 space-y-1">
+                    <div className="absolute top-0 left-0 right-0 z-10 p-0.5 sm:p-1 space-y-0.5 sm:space-y-1">
                       {allDayEvents.map((event) => (
                         <div
                           key={`allday-${event.id}`}
                           onClick={() => handleEventClick(event)}
-                          className="rounded px-2 py-0.5 text-xs text-white font-medium truncate cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 border border-dashed border-white/50"
+                          className="rounded px-1 sm:px-2 py-0.5 text-[10px] sm:text-xs text-white font-medium cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-blue-400 border border-dashed border-white/50 break-words line-clamp-1"
                           style={{ backgroundColor: event.program_color || '#6B7280' }}
                         >
                           {event.title || event.program_name}
