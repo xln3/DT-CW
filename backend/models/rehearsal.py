@@ -43,6 +43,11 @@ class Rehearsal(db.Model):
                                          cascade='all, delete-orphan')
     face_annotations = db.relationship('FaceAnnotation', back_populates='rehearsal', lazy='dynamic',
                                        cascade='all, delete-orphan')
+    # Face recognition related - cascade delete when rehearsal is deleted
+    photo_recognitions = db.relationship('PhotoRecognition', back_populates='rehearsal', lazy='dynamic',
+                                         cascade='all, delete-orphan')
+    recognition_errors = db.relationship('RecognitionError', back_populates='rehearsal', lazy='dynamic',
+                                         cascade='all, delete-orphan')
 
     # Rehearsal status constants
     STATUS_SCHEDULED = 'scheduled'

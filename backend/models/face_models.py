@@ -177,9 +177,10 @@ class PhotoRecognition(db.Model):
     completed_at = db.Column(db.DateTime)
 
     # Relationships
-    rehearsal = db.relationship('Rehearsal', backref='photo_recognitions')
+    rehearsal = db.relationship('Rehearsal', back_populates='photo_recognitions')
     program = db.relationship('Program', backref='photo_recognitions')
-    detected_faces = db.relationship('DetectedFace', back_populates='recognition', lazy='dynamic')
+    detected_faces = db.relationship('DetectedFace', back_populates='recognition', lazy='dynamic',
+                                     cascade='all, delete-orphan')
 
     STATUS_PENDING = 'pending'
     STATUS_PROCESSING = 'processing'
@@ -303,6 +304,9 @@ class RecognitionError(db.Model):
     analyzed_at = db.Column(db.DateTime)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    rehearsal = db.relationship('Rehearsal', back_populates='recognition_errors')
 
     # Error type constants
     ERROR_FALSE_POSITIVE = 'false_positive'
