@@ -7,7 +7,7 @@ interface AuthContextType {
   permissions: string[];
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (data: LoginForm) => Promise<void>;
+  login: (data: LoginForm) => Promise<{ user: User }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -45,11 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (data: LoginForm) => {
+  const login = async (data: LoginForm): Promise<{ user: User }> => {
     const response = await authApi.login(data);
     setTokens(response.access_token, response.refresh_token);
     setUser(response.user);
     setPermissions(response.permissions);
+    return { user: response.user };
   };
 
   const logout = async () => {

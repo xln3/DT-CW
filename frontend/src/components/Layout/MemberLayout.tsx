@@ -1,18 +1,14 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import {
   Menu,
   X,
-  Users,
-  UserCheck,
+  Home,
   Music,
-  Calendar,
-  Settings,
+  ClipboardCheck,
+  User,
   LogOut,
   ChevronDown,
-  LayoutDashboard,
-  MapPin,
-  DollarSign,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import clsx from 'clsx';
@@ -21,67 +17,32 @@ interface NavItem {
   name: string;
   path: string;
   icon: React.ReactNode;
-  roles?: string[];  // Allowed roles for this nav item
 }
 
 const navItems: NavItem[] = [
   {
-    name: '仪表盘',
-    path: '/admin',
-    icon: <LayoutDashboard className="w-5 h-5" />,
-    roles: ['admin', 'committee', 'program_manager'],
+    name: '首页',
+    path: '/member',
+    icon: <Home className="w-5 h-5" />,
   },
   {
-    name: '队员管理',
-    path: '/admin/members',
-    icon: <Users className="w-5 h-5" />,
-    roles: ['admin', 'committee', 'program_manager'],
-  },
-  {
-    name: '教师管理',
-    path: '/admin/teachers',
-    icon: <UserCheck className="w-5 h-5" />,
-    roles: ['admin', 'committee'],
-  },
-  {
-    name: '节目管理',
-    path: '/admin/programs',
+    name: '我的节目',
+    path: '/member/programs',
     icon: <Music className="w-5 h-5" />,
-    roles: ['admin', 'committee', 'program_manager'],
   },
   {
-    name: '排练管理',
-    path: '/admin/rehearsals',
-    icon: <Calendar className="w-5 h-5" />,
-    roles: ['admin', 'committee', 'program_manager'],
+    name: '我的考勤',
+    path: '/member/attendance',
+    icon: <ClipboardCheck className="w-5 h-5" />,
   },
   {
-    name: '队历管理',
-    path: '/admin/calendar',
-    icon: <Calendar className="w-5 h-5" />,
-    roles: ['admin', 'committee', 'program_manager'],
-  },
-  {
-    name: '场地管理',
-    path: '/admin/venues',
-    icon: <MapPin className="w-5 h-5" />,
-    roles: ['admin', 'committee'],
-  },
-  {
-    name: '预算管理',
-    path: '/admin/budget',
-    icon: <DollarSign className="w-5 h-5" />,
-    roles: ['admin', 'committee'],
-  },
-  {
-    name: '系统设置',
-    path: '/admin/settings',
-    icon: <Settings className="w-5 h-5" />,
-    roles: ['admin', 'committee'],
+    name: '个人设置',
+    path: '/member/profile',
+    icon: <User className="w-5 h-5" />,
   },
 ];
 
-export default function AdminLayout() {
+export default function MemberLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const location = useLocation();
@@ -92,11 +53,6 @@ export default function AdminLayout() {
     await logout();
     navigate('/login');
   };
-
-  const filteredNavItems = navItems.filter((item) => {
-    if (!item.roles) return true;  // No role restriction
-    return user?.role && item.roles.includes(user.role);
-  });
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -116,8 +72,8 @@ export default function AdminLayout() {
         )}
       >
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
-          <Link to="/admin" className="text-xl font-bold text-primary-600">
-            舞蹈队管理
+          <Link to="/member" className="text-xl font-bold text-primary-600">
+            队员中心
           </Link>
           <button
             className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500"
@@ -128,14 +84,14 @@ export default function AdminLayout() {
         </div>
 
         <nav className="px-4 py-4 space-y-1">
-          {filteredNavItems.map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item.path}
               to={item.path}
               className={clsx(
                 'flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors',
                 location.pathname === item.path ||
-                  (item.path !== '/admin' && location.pathname.startsWith(item.path))
+                  (item.path !== '/member' && location.pathname.startsWith(item.path))
                   ? 'bg-primary-50 text-primary-700'
                   : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
               )}
@@ -188,17 +144,11 @@ export default function AdminLayout() {
                       <div className="px-4 py-2 text-sm text-gray-500 border-b">
                         {user?.username}
                         <span className="ml-2 px-2 py-0.5 bg-gray-100 rounded text-xs">
-                          {user?.role === 'admin'
-                            ? '管理员'
-                            : user?.role === 'committee'
-                            ? '队委'
-                            : user?.role === 'program_manager'
-                            ? '节目负责人'
-                            : '队员'}
+                          队员
                         </span>
                       </div>
                       <Link
-                        to="/admin/settings/profile"
+                        to="/member/profile"
                         className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         onClick={() => setUserMenuOpen(false)}
                       >

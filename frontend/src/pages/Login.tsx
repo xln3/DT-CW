@@ -13,7 +13,7 @@ export default function Login() {
   const location = useLocation();
   const { login } = useAuth();
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/admin';
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,10 +26,26 @@ export default function Login() {
 
     setIsLoading(true);
     try {
-      await login({ username: username.trim(), password });
-      navigate(from, { replace: true });
-    } catch (err: any) {
-      setError(err.response?.data?.error || '登录失败，请重试');
+      const response = await login({ username: username.trim(), password });
+      // Determine default path based on role
+      const defaultPath = response.user.role === 'member' ? '/member' : '/admin';
+      // Use 'from' path if it's appropriate for the role, otherwise use default
+      let targetPath = defaultPath;
+      if (from) {
+        // If member trying to access /admin, redirect to /member
+        // If admin/committee/pm trying to access /member, redirect to /admin
+        if (response.user.role === 'member' && from.startsWith('/admin')) {
+          targetPath = '/member';
+        } else if (response.user.role !== 'member' && from.startsWith('/member')) {
+          targetPath = '/admin';
+        } else {
+          targetPath = from;
+        }
+      }
+      navigate(targetPath, { replace: true });
+    } catch (err) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || '登录失败，请重试');
     } finally {
       setIsLoading(false);
     }

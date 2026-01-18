@@ -4,12 +4,13 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Layouts
 import AdminLayout from './components/Layout/AdminLayout';
+import MemberLayout from './components/Layout/MemberLayout';
 import PublicLayout from './components/Layout/PublicLayout';
 
 // Pages
 import Login from './pages/Login';
 import Dashboard from './pages/admin/Dashboard';
-import MemberHome from './pages/admin/MemberHome';
+import { MemberDashboard, MyPrograms, MyProgramDetail, MyAttendance, MyProfile } from './pages/member';
 import { MemberList, MemberForm } from './pages/admin/members';
 import { TeacherList, TeacherForm, TeacherApplications, TeacherPayments } from './pages/admin/teachers';
 import { ProgramList, ProgramForm, ProgramDetail } from './pages/admin/programs';
@@ -31,23 +32,53 @@ const queryClient = new QueryClient({
   },
 });
 
-// Protected route wrapper
-function ProtectedRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
+// Loading spinner component
+function LoadingSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+        <p className="mt-4 text-gray-500">加载中...</p>
+      </div>
+    </div>
+  );
+}
+
+// Admin route wrapper - blocks member role from accessing /admin
+function AdminRoute() {
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-500">加载中...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Member role should go to member portal
+  if (user?.role === 'member') {
+    return <Navigate to="/member" replace />;
+  }
+
+  return <Outlet />;
+}
+
+// Member route wrapper - only allows member role
+function MemberRoute() {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Non-member roles should go to admin
+  if (user?.role !== 'member') {
+    return <Navigate to="/admin" replace />;
   }
 
   return <Outlet />;
@@ -60,15 +91,6 @@ function PublicLayoutWrapper() {
       <Outlet />
     </PublicLayout>
   );
-}
-
-// Admin home router - shows different home based on role
-function AdminHome() {
-  const { user } = useAuth();
-  if (user?.role === 'member') {
-    return <MemberHome />;
-  }
-  return <Dashboard />;
 }
 
 
@@ -89,10 +111,21 @@ function App() {
               <Route path="/attendance/search" element={<AttendanceSearch />} />
             </Route>
 
+            {/* Protected member routes */}
+            <Route element={<MemberRoute />}>
+              <Route element={<MemberLayout />}>
+                <Route path="/member" element={<MemberDashboard />} />
+                <Route path="/member/programs" element={<MyPrograms />} />
+                <Route path="/member/programs/:id" element={<MyProgramDetail />} />
+                <Route path="/member/attendance" element={<MyAttendance />} />
+                <Route path="/member/profile" element={<MyProfile />} />
+              </Route>
+            </Route>
+
             {/* Protected admin routes */}
-            <Route element={<ProtectedRoute />}>
+            <Route element={<AdminRoute />}>
               <Route element={<AdminLayout />}>
-                <Route path="/admin" element={<AdminHome />} />
+                <Route path="/admin" element={<Dashboard />} />
 
                 {/* Members */}
                 <Route path="/admin/members" element={<MemberList />} />

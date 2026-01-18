@@ -1132,6 +1132,126 @@ interface RecognizePhotoResponse {
   message?: string;
 }
 
+// Member Portal API (for member role users)
+export const memberPortalApi = {
+  getMyPrograms: async () => {
+    const response = await api.get<{
+      programs: {
+        id: number;
+        name: string;
+        category: string;
+        display_color: string | null;
+        is_leader: boolean;
+        member_count: number;
+        rehearsal_count: number;
+        completed_rehearsal_count: number;
+      }[];
+    }>('/member/my-programs');
+    return response.data;
+  },
+
+  getMyProgramDetail: async (programId: number) => {
+    const response = await api.get<{
+      program: {
+        id: number;
+        name: string;
+        category: string;
+        display_color: string | null;
+        description: string | null;
+      };
+      is_leader: boolean;
+      members: {
+        id: number;
+        name: string;
+        is_leader: boolean;
+      }[];
+      rehearsals: {
+        id: number;
+        scheduled_date: string;
+        scheduled_start_time: string | null;
+        scheduled_end_time: string | null;
+        location: string | null;
+        status: string;
+        is_completed: boolean;
+      }[];
+    }>(`/member/my-programs/${programId}`);
+    return response.data;
+  },
+
+  getMyAttendance: async (semesterId?: number) => {
+    const response = await api.get<{
+      member: {
+        id: number;
+        name: string;
+        student_id: string;
+        department: string;
+      } | null;
+      programs: {
+        program_id: number;
+        program_name: string;
+        total_rehearsals: number;
+        normal_count: number;
+        late_count: number;
+        absent_count: number;
+        leave_count: number;
+        attendance_rate: number;
+      }[];
+      overall_stats: {
+        total_rehearsals: number;
+        normal_count: number;
+        late_count: number;
+        absent_count: number;
+        leave_count: number;
+        attendance_rate: number;
+      };
+    }>('/member/my-attendance', {
+      params: { semester_id: semesterId },
+    });
+    return response.data;
+  },
+
+  getMyRehearsals: async (params?: { days?: number; limit?: number }) => {
+    const response = await api.get<{
+      rehearsals: {
+        id: number;
+        program_id: number;
+        program_name: string;
+        program_color: string | null;
+        scheduled_date: string;
+        scheduled_start_time: string | null;
+        scheduled_end_time: string | null;
+        location: string | null;
+        notes: string | null;
+      }[];
+    }>('/member/my-rehearsals', { params });
+    return response.data;
+  },
+
+  getMyInfo: async () => {
+    const response = await api.get<{
+      member: {
+        id: number;
+        name: string;
+        student_id: string | null;
+        gender: string | null;
+        department: string | null;
+        grade: string | null;
+        phone: string | null;
+        email: string | null;
+        status: string;
+      } | null;
+      user: {
+        id: number;
+        username: string;
+        display_name: string;
+        email: string | null;
+        phone: string | null;
+      };
+    }>('/member/my-info');
+    return response.data;
+  },
+};
+
 export const faceRecognitionApi = {
   // Upload and recognize group photo
   recognizePhoto: async (
