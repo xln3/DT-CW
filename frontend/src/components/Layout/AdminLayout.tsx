@@ -11,7 +11,6 @@ import {
   LogOut,
   ChevronDown,
   LayoutDashboard,
-  MapPin,
   DollarSign,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -50,8 +49,8 @@ const navItems: NavItem[] = [
     roles: ['admin', 'committee', 'program_manager'],
   },
   {
-    name: '排练管理',
-    path: '/admin/rehearsals',
+    name: '排练厅使用时间',
+    path: '/admin/schedule',
     icon: <Calendar className="w-5 h-5" />,
     roles: ['admin', 'committee', 'program_manager'],
   },
@@ -60,12 +59,6 @@ const navItems: NavItem[] = [
     path: '/admin/calendar',
     icon: <Calendar className="w-5 h-5" />,
     roles: ['admin', 'committee', 'program_manager'],
-  },
-  {
-    name: '场地管理',
-    path: '/admin/venues',
-    icon: <MapPin className="w-5 h-5" />,
-    roles: ['admin', 'committee'],
   },
   {
     name: '预算管理',

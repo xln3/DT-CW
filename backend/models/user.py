@@ -83,6 +83,7 @@ class User(db.Model):
             'display_name': self.display_name,
             'role': self.role,
             'status': self.status,
+            'member_id': self.member_id,
             'last_login_at': self.last_login_at.isoformat() if self.last_login_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }

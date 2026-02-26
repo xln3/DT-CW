@@ -74,6 +74,7 @@ class Rehearsal(db.Model):
             'id': self.id,
             'program_id': self.program_id,
             'program_name': self.program.name if self.program else None,
+            'program_color': self.program.display_color if self.program else None,
             'teacher_id': self.teacher_id,
             'teacher_name': self.teacher.name if self.teacher else None,
             'scheduled_date': self.scheduled_date.isoformat() if self.scheduled_date else None,

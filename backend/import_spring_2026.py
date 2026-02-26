@@ -17,17 +17,17 @@ from models import (
 EXCEL_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     '..', 'assets', '春季训练',
-    '2026春季学期一队参训及剧目分流统计(3).xlsx',
+    '2026春季学期一队参训及剧目分流统计(5).xlsx',
 )
 
 # Program definitions: name -> (display_color, description)
 PROGRAM_DEFS = {
-    '芭蕾基训': ('#E91E63', '常规排练: 周日 9:00-11:00 | 新清舞蹈排练厅'),
-    '冰凌花':   ('#9C27B0', '常规排练: 周日 12:00-14:15 | 新清舞蹈排练厅'),
+    '芭蕾基训': ('#EC4899', '常规排练: 周日 9:00-11:00 | 新清舞蹈排练厅'),
+    '冰凌花':   ('#EAB308', '常规排练: 周日 12:00-14:15 | 新清舞蹈排练厅'),
     '香扇藏春': ('#FF9800', '常规排练: 周日 14:15-16:30 | 新清舞蹈排练厅'),
-    '冬':       ('#2196F3', '常规排练: 周六 12:00-14:15 | 新清舞蹈排练厅'),
-    '大河之子': ('#4CAF50', '常规排练: 周六 14:30-16:45 | 新清舞蹈排练厅'),
-    '我们看见了鸿雁': ('#F44336', '常规排练: 周日 18:45-21:00 | 新清舞蹈排练厅'),
+    '冬':       ('#3B82F6', '常规排练: 周六 12:00-14:15 | 新清舞蹈排练厅'),
+    '大河之子': ('#92400E', '常规排练: 周六 14:30-16:45 | 新清舞蹈排练厅'),
+    '我们看见了鸿雁': ('#22C55E', '常规排练: 周日 18:45-21:00 | 新清舞蹈排练厅'),
 }
 
 # Leaders: program_name -> [(member_name, member_id), ...]
@@ -43,27 +43,21 @@ LEADERS = {
 # New members to create
 NEW_MEMBERS = ['裴雨桐', '陈海雁', '肖艳', '邓欣晨', '乔炫嘉', '王宇轩']
 
-# Venue time slots: (day_of_week, start_time, end_time)
+# 新清舞蹈排练厅 time slots: (day_of_week, start_time, end_time)
 # day_of_week: 0=Mon, 1=Tue, ..., 6=Sun
-VENUE_TIME_SLOTS = [
-    # 周一
-    (0, time(12, 0), time(19, 0)),
-    (0, time(22, 0), time(22, 30)),
-    # 周二
-    (1, time(12, 0), time(15, 0)),
-    (1, time(17, 0), time(19, 0)),
-    (1, time(22, 0), time(22, 30)),
-    # 周三
-    (2, time(12, 0), time(13, 0)),
-    (2, time(15, 30), time(22, 30)),
-    # 周四: 不可用 — no slots
-    # 周五
-    (4, time(12, 0), time(22, 30)),
-    # 周六
-    (5, time(12, 0), time(13, 0)),
-    (5, time(17, 30), time(22, 30)),
-    # 周日
-    (6, time(8, 0), time(22, 30)),
+XINQING_TIME_SLOTS = [
+    (0, time(12, 0), time(19, 0)),   # 周一
+    (1, time(12, 0), time(15, 0)),   # 周二
+    (2, time(15, 30), time(22, 0)),  # 周三
+    (3, time(12, 0), time(22, 0)),   # 周四
+    (4, time(17, 30), time(22, 0)),  # 周五
+    (5, time(11, 30), time(22, 0)),  # 周六
+    (6, time(8, 0), time(22, 0)),    # 周日
+]
+
+# 实验剧场 time slots
+SHIYAN_TIME_SLOTS = [
+    (6, time(12, 0), time(22, 0)),   # 周日
 ]
 
 
@@ -111,7 +105,7 @@ def main():
         semester = Semester(
             name='2026春季',
             semester_type=Semester.TYPE_SPRING,
-            start_date=date(2026, 3, 7),
+            start_date=date(2026, 2, 23),
             end_date=date(2026, 5, 31),
         )
         db.session.add(semester)
@@ -236,28 +230,49 @@ def main():
 
         print(f'✓ 升级 {upgraded} 位用户为 program_manager, 创建 {user_programs_created} 条 UserProgram')
 
-        # --- Step 6: Create venue + time slots ---
-        venue = Venue.query.filter_by(name='新清舞蹈排练厅').first()
-        if not venue:
-            venue = Venue(
+        # --- Step 6: Create venues + time slots ---
+        slot_count = 0
+
+        # 新清舞蹈排练厅
+        xinqing = Venue.query.filter_by(name='新清舞蹈排练厅').first()
+        if not xinqing:
+            xinqing = Venue(
                 name='新清舞蹈排练厅',
                 location='新清华学堂',
                 is_active=True,
             )
-            db.session.add(venue)
+            db.session.add(xinqing)
             db.session.flush()
-            print(f'✓ 创建场地: {venue.name} (id={venue.id})')
+            print(f'✓ 创建场地: {xinqing.name} (id={xinqing.id})')
         else:
-            print(f'✓ 场地已存在: {venue.name} (id={venue.id})')
+            print(f'✓ 场地已存在: {xinqing.name} (id={xinqing.id})')
 
-        slot_count = 0
-        for day, start, end in VENUE_TIME_SLOTS:
+        for day, start, end in XINQING_TIME_SLOTS:
             ts = VenueTimeSlot(
-                venue_id=venue.id,
-                semester_id=semester.id,
-                day_of_week=day,
-                start_time=start,
-                end_time=end,
+                venue_id=xinqing.id, semester_id=semester.id,
+                day_of_week=day, start_time=start, end_time=end,
+                is_available=True,
+            )
+            db.session.add(ts)
+            slot_count += 1
+
+        # 实验剧场
+        shiyan = Venue.query.filter_by(name='实验剧场').first()
+        if not shiyan:
+            shiyan = Venue(
+                name='实验剧场',
+                is_active=True,
+            )
+            db.session.add(shiyan)
+            db.session.flush()
+            print(f'✓ 创建场地: {shiyan.name} (id={shiyan.id})')
+        else:
+            print(f'✓ 场地已存在: {shiyan.name} (id={shiyan.id})')
+
+        for day, start, end in SHIYAN_TIME_SLOTS:
+            ts = VenueTimeSlot(
+                venue_id=shiyan.id, semester_id=semester.id,
+                day_of_week=day, start_time=start, end_time=end,
                 is_available=True,
             )
             db.session.add(ts)

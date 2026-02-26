@@ -7,6 +7,7 @@ export interface User {
   phone?: string;
   role: 'admin' | 'committee' | 'program_manager' | 'member';
   status: 'active' | 'inactive';
+  member_id?: number | null;
   last_login_at?: string;
   created_at: string;
   managed_program_ids?: number[];
@@ -130,6 +131,7 @@ export interface Rehearsal {
   id: number;
   program_id: number;
   program_name?: string;
+  program_color?: string;
   teacher_id?: number;
   teacher_name?: string;
   scheduled_date: string;

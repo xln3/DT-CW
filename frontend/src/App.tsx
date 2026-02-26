@@ -14,9 +14,10 @@ import { MemberDashboard, MyPrograms, MyProgramDetail, MyAttendance, MyProfile }
 import { MemberList, MemberForm } from './pages/admin/members';
 import { TeacherList, TeacherForm, TeacherApplications, TeacherPayments } from './pages/admin/teachers';
 import { ProgramList, ProgramForm, ProgramDetail } from './pages/admin/programs';
-import { RehearsalList, RehearsalForm, RehearsalDetail } from './pages/admin/rehearsals';
+import { RehearsalForm, RehearsalDetail } from './pages/admin/rehearsals';
+import RehearsalHall from './pages/admin/RehearsalHall';
 import { CalendarList } from './pages/admin/calendar';
-import { VenueList, VenueForm, VenueSchedule } from './pages/admin/venues';
+import { VenueList, VenueForm } from './pages/admin/venues';
 import { BudgetList } from './pages/admin/budget';
 import { SemesterList, UserList, SettingsHub, Profile } from './pages/admin/settings';
 import { AttendanceOverview, ProgramAttendance, AttendanceSearch } from './pages/public';
@@ -145,8 +146,11 @@ function App() {
                 <Route path="/admin/programs/:id" element={<ProgramDetail />} />
                 <Route path="/admin/programs/:id/edit" element={<ProgramForm />} />
 
-                {/* Rehearsals */}
-                <Route path="/admin/rehearsals" element={<RehearsalList />} />
+                {/* Rehearsal Hall (merged schedule + rehearsal management) */}
+                <Route path="/admin/schedule" element={<RehearsalHall />} />
+
+                {/* Rehearsal detail/edit/create */}
+                <Route path="/admin/rehearsals" element={<Navigate to="/admin/schedule" replace />} />
                 <Route path="/admin/rehearsals/new" element={<RehearsalForm />} />
                 <Route path="/admin/rehearsals/:id" element={<RehearsalDetail />} />
                 <Route path="/admin/rehearsals/:id/edit" element={<RehearsalForm />} />
@@ -154,11 +158,11 @@ function App() {
                 {/* Calendar */}
                 <Route path="/admin/calendar" element={<CalendarList />} />
 
-                {/* Venues */}
-                <Route path="/admin/venues" element={<VenueList />} />
+                {/* Venues (redirect to schedule) */}
+                <Route path="/admin/venues" element={<Navigate to="/admin/schedule" replace />} />
                 <Route path="/admin/venues/new" element={<VenueForm />} />
                 <Route path="/admin/venues/:id/edit" element={<VenueForm />} />
-                <Route path="/admin/venues/:id/schedule" element={<VenueSchedule />} />
+                <Route path="/admin/venues/:id/schedule" element={<Navigate to="/admin/schedule" replace />} />
 
                 {/* Budget */}
                 <Route path="/admin/budget" element={<BudgetList />} />
