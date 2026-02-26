@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Music, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -55,10 +55,9 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 bg-primary-100 rounded-full flex items-center justify-center">
-            <Music className="h-10 w-10 text-primary-600" />
-          </div>
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">登录</h2>
+          <img src="/favicon.svg" alt="THUDT" className="mx-auto h-16 w-16" />
+          <h2 className="mt-4 text-3xl font-bold text-primary-700">THUDT</h2>
+          <p className="mt-1 text-sm text-gray-500">舞蹈队管理系统</p>
           <p className="mt-2 text-sm text-gray-600">用户名为姓名，密码为学号后六位</p>
         </div>
 

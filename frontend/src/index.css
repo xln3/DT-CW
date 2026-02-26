@@ -2,16 +2,16 @@
 
 /* Tailwind CSS 4 theme configuration */
 @theme {
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
+  --color-primary-50: #faf5fc;
+  --color-primary-100: #f3e6f5;
+  --color-primary-200: #e8cceb;
+  --color-primary-300: #d5a3db;
+  --color-primary-400: #bd74c5;
+  --color-primary-500: #9e4daa;
+  --color-primary-600: #82318e;
+  --color-primary-700: #6b2676;
+  --color-primary-800: #5a2062;
+  --color-primary-900: #4a1a51;
 }
 
 /* Custom styles */
@@ -33,7 +33,7 @@ body {
 .form-input:focus {
   outline: none;
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 3px rgba(130, 49, 142, 0.1);
 }
 
 .form-label {
