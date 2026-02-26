@@ -38,7 +38,7 @@ export default function TeacherList() {
           <h1 className="text-2xl font-bold text-gray-900">教师管理</h1>
           <p className="mt-1 text-sm text-gray-500">管理艺术团所有教师信息</p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Link to="/admin/teachers/applications" className="btn-secondary">
             <FileText className="w-4 h-4 mr-2" />
             入校申请
@@ -102,7 +102,7 @@ export default function TeacherList() {
               <tr>
                 <th>姓名</th>
                 <th>专业特长</th>
-                <th>电话</th>
+                <th className="hidden sm:table-cell">电话</th>
                 <th>状态</th>
                 {canEdit && <th className="text-right">操作</th>}
               </tr>
@@ -125,7 +125,7 @@ export default function TeacherList() {
                   <tr key={teacher.id} className="hover:bg-gray-50">
                     <td className="font-medium">{teacher.name}</td>
                     <td>{teacher.specialty || '-'}</td>
-                    <td>{teacher.phone || '-'}</td>
+                    <td className="hidden sm:table-cell">{teacher.phone || '-'}</td>
                     <td>
                       <span
                         className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${

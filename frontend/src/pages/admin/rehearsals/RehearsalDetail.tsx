@@ -268,7 +268,7 @@ export default function RehearsalDetail() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center space-x-4">
           <button
             onClick={() => navigate('/admin/rehearsals')}
@@ -277,7 +277,7 @@ export default function RehearsalDetail() {
             <ArrowLeft className="w-6 h-6" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
               {rehearsal.program_name} - 排练详情
             </h1>
             <p className="mt-1 text-sm text-gray-500">
@@ -288,7 +288,7 @@ export default function RehearsalDetail() {
           </div>
         </div>
         {canEdit && (
-          <Link to={`/admin/rehearsals/${id}/edit`} className="btn-primary">
+          <Link to={`/admin/rehearsals/${id}/edit`} className="btn-primary self-start sm:self-auto">
             <Edit2 className="w-4 h-4 mr-2" />
             编辑
           </Link>

@@ -341,8 +341,8 @@ export default function RehearsalList() {
                 {groupedRehearsals[date].map((rehearsal) => (
                   <div key={rehearsal.id} className={`card hover:shadow-md transition-shadow ${rehearsal.status === 'cancelled' ? 'opacity-60' : ''}`}>
                     <div className="card-body">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-3 flex-wrap gap-2">
                             <h4 className="text-lg font-medium text-gray-900">
                               {rehearsal.program_name}
@@ -354,7 +354,7 @@ export default function RehearsalList() {
                               </span>
                             )}
                           </div>
-                          <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-600">
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
                             {(rehearsal.scheduled_start_time || rehearsal.scheduled_end_time) && (
                               <div className="flex items-center">
                                 <Clock className="w-4 h-4 mr-1" />
@@ -375,7 +375,7 @@ export default function RehearsalList() {
                           </div>
                         </div>
                         {canEdit && (
-                          <div className="flex items-center space-x-2 ml-4">
+                          <div className="flex flex-wrap items-center gap-1 sm:space-x-2 sm:ml-4 sm:flex-nowrap">
                             <Link
                               to={`/admin/rehearsals/${rehearsal.id}`}
                               className="btn-secondary text-sm py-1"

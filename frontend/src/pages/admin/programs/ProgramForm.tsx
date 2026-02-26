@@ -143,8 +143,8 @@ export default function ProgramForm() {
               <label className="form-label">
                 展示颜色
               </label>
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {PRESET_COLORS.map((color) => (
                     <button
                       key={color.value}
@@ -160,7 +160,7 @@ export default function ProgramForm() {
                     />
                   ))}
                 </div>
-                <div className="flex items-center gap-2 ml-2">
+                <div className="flex items-center gap-2">
                   <input
                     type="color"
                     value={form.display_color}

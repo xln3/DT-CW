@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { CalendarEvent, EventsByDate, Semester, WeekScheduleData } from '../../types';
-import { isTrainingPeriod, SEMESTER_TYPES } from '../../types';
+import { isTrainingPeriod } from '../../types';
 import { publicCalendarApi, publicScheduleApi } from '../../services/api';
 import MonthView from '../../components/Calendar/MonthView';
 import EventList from '../../components/Calendar/EventList';
@@ -10,8 +9,6 @@ import { WeekScheduleView } from '../../components/Schedule';
 import { AlertCircle, TrendingUp, Calendar as CalendarIcon } from 'lucide-react';
 
 const CalendarPage: React.FC = () => {
-  const navigate = useNavigate();
-
   // Semester state
   const [semester, setSemester] = useState<Semester | null>(null);
   const [semesterLoading, setSemesterLoading] = useState(true);
@@ -130,10 +127,6 @@ const CalendarPage: React.FC = () => {
 
   const handleWeekChange = (startDate: string) => {
     loadWeekSchedule(startDate);
-  };
-
-  const getSemesterTypeLabel = (type: string) => {
-    return SEMESTER_TYPES.find(t => t.value === type)?.label || type;
   };
 
   // Show loading while determining semester type

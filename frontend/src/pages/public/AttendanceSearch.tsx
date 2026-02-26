@@ -87,13 +87,13 @@ export default function AttendanceSearch() {
     <div className="space-y-8">
       {/* Header */}
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900">考勤查询</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">考勤查询</h1>
         <p className="mt-2 text-gray-600">输入姓名或学号查询个人考勤记录</p>
       </div>
 
       {/* Search Form */}
       <div className="max-w-xl mx-auto">
-        <form onSubmit={handleSearch} className="flex space-x-4">
+        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -138,10 +138,10 @@ export default function AttendanceSearch() {
               <div key={result.member.id} className="card">
                 <div className="card-body space-y-6">
                   {/* Member Info */}
-                  <div className="flex items-start justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div className="flex items-center space-x-4">
-                      <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center">
-                        <User className="w-8 h-8 text-primary-600" />
+                      <div className="w-12 h-12 sm:w-16 sm:h-16 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <User className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600" />
                       </div>
                       <div>
                         <h2 className="text-xl font-bold text-gray-900">
@@ -157,7 +157,7 @@ export default function AttendanceSearch() {
                         )}
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <p
                         className={`text-3xl font-bold ${getAttendanceColor(result.overall_stats.attendance_rate)}`}
                       >
@@ -226,7 +226,7 @@ export default function AttendanceSearch() {
                                 {getAttendanceBadge(program.attendance_rate)}
                               </div>
                             </div>
-                            <div className="flex items-center space-x-4 text-sm text-gray-500">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
                               <span>排练 {program.total_rehearsals} 次</span>
                               <span className="text-green-600">
                                 正常 {program.normal_count}

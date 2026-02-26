@@ -61,14 +61,14 @@ export default function AttendanceOverview() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">考勤总览</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">考勤总览</h1>
         {data?.semester && (
           <p className="mt-2 text-gray-600">当前学期：{data.semester.name}</p>
         )}
       </div>
 
       {/* Legend */}
-      <div className="flex items-center space-x-6 text-sm">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
         <div className="flex items-center space-x-2">
           <div className="w-4 h-4 bg-green-500 rounded" />
           <span className="text-gray-600">正常出勤</span>
