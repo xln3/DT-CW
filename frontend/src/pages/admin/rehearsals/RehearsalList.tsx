@@ -1,18 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Calendar, Clock, MapPin, Users, Edit2, Trash2, AlertCircle, ChevronLeft, ChevronRight, XCircle, Upload, Download } from 'lucide-react';
-import { rehearsalsApi, programsApi } from '../../../services/api';
+import EmptyState from '../../../components/EmptyState';
+import { rehearsalsApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
-import type { Rehearsal, Program } from '../../../types';
+import type { Rehearsal } from '../../../types';
+import { useRehearsals, useDeleteRehearsal, usePrograms, rehearsalKeys } from '../../../hooks';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function RehearsalList() {
-  const [rehearsals, setRehearsals] = useState<Rehearsal[]>([]);
-  const [programs, setPrograms] = useState<Program[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [programFilter, setProgramFilter] = useState<number | ''>('');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState<number | null>(null);
+  const [actionError, setActionError] = useState('');
 
   // Import state
   const [isImporting, setIsImporting] = useState(false);
@@ -23,79 +23,39 @@ export default function RehearsalList() {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Date range filter (current week by default, Monday to Sunday)
-  const [dateFrom, setDateFrom] = useState(() => {
-    const d = new Date();
-    // getDay() returns 0 for Sunday, we want Monday (1) as start
-    // Formula: subtract (getDay() + 6) % 7 to get Monday
-    const dayOfWeek = d.getDay();
-    const daysToMonday = (dayOfWeek + 6) % 7; // Sunday=6, Monday=0, Tuesday=1, etc.
-    d.setDate(d.getDate() - daysToMonday);
-    return d.toISOString().split('T')[0];
-  });
-  const [dateTo, setDateTo] = useState(() => {
-    const d = new Date();
-    const dayOfWeek = d.getDay();
-    const daysToMonday = (dayOfWeek + 6) % 7;
-    d.setDate(d.getDate() - daysToMonday + 6); // Monday + 6 = Sunday
-    return d.toISOString().split('T')[0];
-  });
+  // Date range filter (empty = show all)
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const { hasRole } = useAuth();
   const canCreate = hasRole('admin', 'committee', 'program_manager');
   const canEdit = hasRole('admin', 'committee', 'program_manager');
+  const queryClient = useQueryClient();
 
-  const fetchPrograms = async () => {
-    try {
-      const data = await programsApi.list({ status: 'active' });
-      setPrograms(data);
-    } catch (err) {
-      console.error('Failed to fetch programs:', err);
-    }
-  };
-
-  const fetchRehearsals = async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const data = await rehearsalsApi.list({
-        program_id: programFilter || undefined,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-      });
-      setRehearsals(data);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '加载失败');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPrograms();
-  }, []);
-
-  useEffect(() => {
-    fetchRehearsals();
-  }, [programFilter, dateFrom, dateTo]);
+  const { data: programs = [] } = usePrograms({ status: 'active' });
+  const { data: rehearsals = [], isLoading, error } = useRehearsals({
+    program_id: programFilter || undefined,
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+  });
+  const deleteMutation = useDeleteRehearsal();
 
   const handleDelete = async (id: number) => {
     try {
-      await rehearsalsApi.delete(id);
-      setRehearsals(rehearsals.filter((r) => r.id !== id));
+      await deleteMutation.mutateAsync(id);
       setDeleteConfirm(null);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '删除失败');
+    } catch {
+      // error available via deleteMutation.error
     }
   };
 
   const handleCancel = async (id: number) => {
     try {
-      const updated = await rehearsalsApi.update(id, { status: 'cancelled' });
-      setRehearsals(rehearsals.map((r) => (r.id === id ? updated : r)));
+      await rehearsalsApi.update(id, { status: 'cancelled' });
+      await queryClient.invalidateQueries({ queryKey: rehearsalKeys.lists() });
       setCancelConfirm(null);
     } catch (err: any) {
-      setError(err.response?.data?.error || '取消失败');
+      setActionError(err.response?.data?.error || '取消失败');
     }
   };
 
@@ -105,7 +65,7 @@ export default function RehearsalList() {
 
     setIsImporting(true);
     setImportResult(null);
-    setError('');
+    setActionError('');
 
     try {
       const result = await rehearsalsApi.importCsv(file);
@@ -114,8 +74,7 @@ export default function RehearsalList() {
         created: result.created_count,
         errors: result.errors,
       });
-      // Refresh the list
-      fetchRehearsals();
+      await queryClient.invalidateQueries({ queryKey: rehearsalKeys.lists() });
     } catch (err: any) {
       setImportResult({
         success: false,
@@ -123,7 +82,6 @@ export default function RehearsalList() {
       });
     } finally {
       setIsImporting(false);
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -145,7 +103,28 @@ export default function RehearsalList() {
     }
   };
 
+  const setThisWeek = () => {
+    const d = new Date();
+    const dayOfWeek = d.getDay();
+    const daysToMonday = (dayOfWeek + 6) % 7;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - daysToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    setDateFrom(monday.toISOString().split('T')[0]);
+    setDateTo(sunday.toISOString().split('T')[0]);
+  };
+
+  const clearDateFilter = () => {
+    setDateFrom('');
+    setDateTo('');
+  };
+
   const navigateWeek = (direction: number) => {
+    if (!dateFrom || !dateTo) {
+      setThisWeek();
+      return;
+    }
     const from = new Date(dateFrom);
     const to = new Date(dateTo);
     from.setDate(from.getDate() + direction * 7);
@@ -179,7 +158,7 @@ export default function RehearsalList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">排练管理</h1>
           <p className="mt-1 text-sm text-gray-500">管理排练安排和考勤</p>
@@ -252,6 +231,26 @@ export default function RehearsalList() {
               </button>
             </div>
 
+            {/* Quick filters */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={setThisWeek}
+                className={`px-3 py-2 text-sm rounded-md ${
+                  dateFrom && dateTo ? 'btn-secondary' : 'btn-secondary'
+                }`}
+              >
+                本周
+              </button>
+              {(dateFrom || dateTo) && (
+                <button
+                  onClick={clearDateFilter}
+                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800"
+                >
+                  全部
+                </button>
+              )}
+            </div>
+
             {/* Program filter */}
             <select
               className="form-input w-full lg:w-48"
@@ -269,10 +268,12 @@ export default function RehearsalList() {
         </div>
       </div>
 
-      {error && (
+      {(error || deleteMutation.error || actionError) && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
           <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />
-          <span className="text-sm text-red-700">{error}</span>
+          <span className="text-sm text-red-700">
+            {actionError || (error as any)?.response?.data?.error || (deleteMutation.error as any)?.response?.data?.error || '加载失败'}
+          </span>
         </div>
       )}
 
@@ -316,14 +317,16 @@ export default function RehearsalList() {
         </div>
       ) : rehearsals.length === 0 ? (
         <div className="card">
-          <div className="card-body text-center py-12">
-            <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">该时间段内暂无排练安排</p>
-            {canCreate && (
-              <Link to="/admin/rehearsals/new" className="mt-4 inline-block btn-primary">
-                创建排练
-              </Link>
-            )}
+          <div className="card-body">
+            <EmptyState
+              icon={Calendar}
+              title="该时间段内暂无排练安排"
+              action={canCreate ? (
+                <Link to="/admin/rehearsals/new" className="btn-primary">
+                  创建排练
+                </Link>
+              ) : undefined}
+            />
           </div>
         </div>
       ) : (

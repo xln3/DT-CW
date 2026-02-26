@@ -12,8 +12,24 @@ users_bp = Blueprint('users', __name__)
 @users_bp.route('', methods=['GET'])
 @committee_required
 def list_users():
-    """List all users."""
-    users = User.query.order_by(User.created_at.desc()).all()
+    """List all users with optional pagination."""
+    page = request.args.get('page', type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
+    query = User.query.order_by(User.created_at.desc())
+
+    if page is not None:
+        total = query.count()
+        users = query.offset((page - 1) * per_page).limit(per_page).all()
+        return jsonify({
+            'items': [u.to_dict(include_email=True) for u in users],
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'pages': (total + per_page - 1) // per_page,
+        })
+
+    users = query.all()
     return jsonify({
         'users': [u.to_dict(include_email=True) for u in users]
     })

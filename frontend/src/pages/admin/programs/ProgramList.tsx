@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Edit2, Trash2, Users, Calendar, AlertCircle, Upload, CheckCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, Calendar, AlertCircle, Upload, CheckCircle, Music } from 'lucide-react';
+import EmptyState from '../../../components/EmptyState';
 import { programsApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
-import type { Program } from '../../../types';
+import { usePrograms, useDeleteProgram, programKeys } from '../../../hooks';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ImportStats {
   programs_created: number;
@@ -13,11 +15,9 @@ interface ImportStats {
 }
 
 export default function ProgramList() {
-  const [programs, setPrograms] = useState<Program[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [importError, setImportError] = useState('');
 
   // Import state
   const [isImporting, setIsImporting] = useState(false);
@@ -27,33 +27,19 @@ export default function ProgramList() {
   const { hasRole } = useAuth();
   const canCreate = hasRole('admin', 'committee');
   const canEdit = hasRole('admin', 'committee', 'program_manager');
+  const queryClient = useQueryClient();
 
-  const fetchPrograms = async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const data = await programsApi.list({
-        status: statusFilter || undefined,
-      });
-      setPrograms(data);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '加载失败');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPrograms();
-  }, [statusFilter]);
+  const { data: programs = [], isLoading, error } = usePrograms({
+    status: statusFilter || undefined,
+  });
+  const deleteMutation = useDeleteProgram();
 
   const handleDelete = async (id: number) => {
     try {
-      await programsApi.delete(id);
-      setPrograms(programs.filter((p) => p.id !== id));
+      await deleteMutation.mutateAsync(id);
       setDeleteConfirm(null);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '删除失败');
+    } catch {
+      // error available via deleteMutation.error
     }
   };
 
@@ -62,15 +48,15 @@ export default function ProgramList() {
     if (!file) return;
 
     setIsImporting(true);
-    setError('');
+    setImportError('');
     setImportStats(null);
 
     try {
       const result = await programsApi.importCsv(file, '202601');
       setImportStats(result.stats);
-      fetchPrograms();
+      await queryClient.invalidateQueries({ queryKey: programKeys.lists() });
     } catch (err: any) {
-      setError(err.response?.data?.error || '导入失败');
+      setImportError(err.response?.data?.error || '导入失败');
     } finally {
       setIsImporting(false);
       if (fileInputRef.current) {
@@ -94,7 +80,7 @@ export default function ProgramList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">节目管理</h1>
           <p className="mt-1 text-sm text-gray-500">管理舞蹈队所有节目</p>
@@ -142,10 +128,12 @@ export default function ProgramList() {
         </div>
       </div>
 
-      {error && (
+      {(error || deleteMutation.error || importError) && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
           <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />
-          <span className="text-sm text-red-700">{error}</span>
+          <span className="text-sm text-red-700">
+            {importError || (error as any)?.response?.data?.error || (deleteMutation.error as any)?.response?.data?.error || '加载失败'}
+          </span>
         </div>
       )}
 
@@ -179,13 +167,16 @@ export default function ProgramList() {
         </div>
       ) : programs.length === 0 ? (
         <div className="card">
-          <div className="card-body text-center py-12">
-            <p className="text-gray-500">暂无节目数据</p>
-            {canCreate && (
-              <Link to="/admin/programs/new" className="mt-4 inline-block btn-primary">
-                创建第一个节目
-              </Link>
-            )}
+          <div className="card-body">
+            <EmptyState
+              icon={Music}
+              title="暂无节目数据"
+              action={canCreate ? (
+                <Link to="/admin/programs/new" className="btn-primary">
+                  创建第一个节目
+                </Link>
+              ) : undefined}
+            />
           </div>
         </div>
       ) : (

@@ -45,3 +45,21 @@ backend/uploads/
 
 # InsightFace models (large files)
 backend/models/insightface/models/
+
+# Data files (contains personal information)
+backend/data/
+
+# Test assets (sample images)
+assets/
+
+# Claude Code internal files
+.claude/
+
+# Coverage reports
+.coverage
+htmlcov/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp

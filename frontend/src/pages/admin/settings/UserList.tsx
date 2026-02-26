@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Plus,
   Edit2,
@@ -8,10 +8,15 @@ import {
   User,
   Shield,
   X,
+  Users,
 } from 'lucide-react';
+import EmptyState from '../../../components/EmptyState';
 import { usersApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { User as UserType } from '../../../types';
+import Pagination from '../../../components/Pagination';
+import { useUsers, useDeleteUser, userKeys } from '../../../hooks';
+import { useQueryClient } from '@tanstack/react-query';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: '系统管理员',
@@ -29,8 +34,8 @@ export default function UserList() {
   const { user: currentUser, hasRole } = useAuth();
   const isAdmin = hasRole('admin');
 
-  const [users, setUsers] = useState<UserType[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const perPage = 20;
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
@@ -45,21 +50,13 @@ export default function UserList() {
   });
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useUsers({ page, per_page: perPage });
+  const users = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const pages = data?.pages ?? 1;
 
-  const fetchUsers = async () => {
-    setIsLoading(true);
-    try {
-      const data = await usersApi.list();
-      setUsers(data);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '加载失败');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const deleteMutation = useDeleteUser();
 
   const handleOpenForm = (user?: UserType) => {
     if (user) {
@@ -140,7 +137,7 @@ export default function UserList() {
           phone: form.phone || undefined,
         });
       }
-      await fetchUsers();
+      await queryClient.invalidateQueries({ queryKey: userKeys.lists() });
       handleCloseForm();
     } catch (err: any) {
       setError(err.response?.data?.error || '保存失败');
@@ -151,12 +148,10 @@ export default function UserList() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('确定要删除该用户吗？')) return;
-
     try {
-      await usersApi.delete(id);
-      setUsers(users.filter((u) => u.id !== id));
-    } catch (err: any) {
-      setError(err.response?.data?.error || '删除失败');
+      await deleteMutation.mutateAsync(id);
+    } catch {
+      // error available via deleteMutation.error
     }
   };
 
@@ -164,7 +159,7 @@ export default function UserList() {
     const newStatus = user.status === 'active' ? 'inactive' : 'active';
     try {
       await usersApi.update(user.id, { status: newStatus });
-      setUsers(users.map((u) => (u.id === user.id ? { ...u, status: newStatus } : u)));
+      await queryClient.invalidateQueries({ queryKey: userKeys.lists() });
     } catch (err: any) {
       setError(err.response?.data?.error || '更新失败');
     }
@@ -180,7 +175,7 @@ export default function UserList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">用户管理</h1>
           <p className="mt-1 text-sm text-gray-500">管理系统用户账号</p>
@@ -191,17 +186,19 @@ export default function UserList() {
         </button>
       </div>
 
-      {error && !showForm && (
+      {(error || deleteMutation.error) && !showForm && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
           <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />
-          <span className="text-sm text-red-700">{error}</span>
+          <span className="text-sm text-red-700">
+            {error || (deleteMutation.error as any)?.response?.data?.error || '操作失败'}
+          </span>
         </div>
       )}
 
       <div className="card">
         <div className="card-body">
           {users.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">暂无用户数据</p>
+            <EmptyState icon={Users} title="暂无用户数据" />
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -312,6 +309,17 @@ export default function UserList() {
           )}
         </div>
       </div>
+
+      {/* Pagination */}
+      {!isLoading && (
+        <Pagination
+          page={page}
+          pages={pages}
+          total={total}
+          perPage={perPage}
+          onChange={setPage}
+        />
+      )}
 
       {/* Form Modal */}
       {showForm && (

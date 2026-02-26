@@ -34,6 +34,7 @@ import type {
   RecognitionResult,
   OverviewMatrixData,
   ProgramMatrixData,
+  PaginatedResponse,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -189,6 +190,11 @@ export const membersApi = {
   list: async (params?: { status?: string; search?: string }) => {
     const response = await api.get<{ members: Member[] }>('/admin/members', { params });
     return response.data.members;
+  },
+
+  listPaginated: async (params: { status?: string; search?: string; page: number; per_page?: number }) => {
+    const response = await api.get<PaginatedResponse<Member>>('/admin/members', { params });
+    return response.data;
   },
 
   get: async (id: number) => {
@@ -470,6 +476,11 @@ export const usersApi = {
       users: User[];
     }>('/admin/users');
     return response.data.users;
+  },
+
+  listPaginated: async (params: { page: number; per_page?: number }) => {
+    const response = await api.get<PaginatedResponse<User>>('/admin/users', { params });
+    return response.data;
   },
 
   get: async (id: number) => {

@@ -1,17 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, AlertCircle, Upload, Download, X } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, AlertCircle, Upload, Download, X, Users } from 'lucide-react';
+import EmptyState from '../../../components/EmptyState';
+import TableSkeleton from '../../../components/TableSkeleton';
 import { membersApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
-import type { Member } from '../../../types';
+import Pagination from '../../../components/Pagination';
+import { useMembers, useDeleteMember, memberKeys } from '../../../hooks';
+import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function MemberList() {
-  const [members, setMembers] = useState<Member[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const perPage = 20;
 
   // Import state
   const [isImporting, setIsImporting] = useState(false);
@@ -25,39 +29,32 @@ export default function MemberList() {
 
   const { hasRole } = useAuth();
   const canEdit = hasRole('admin', 'committee');
+  const debouncedSearch = useDebouncedValue(search);
+  const queryClient = useQueryClient();
 
-  const fetchMembers = async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const data = await membersApi.list({
-        search: search || undefined,
-        status: statusFilter || undefined,
-      });
-      setMembers(data);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '加载失败');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { data, isLoading, error } = useMembers({
+    search: debouncedSearch || undefined,
+    status: statusFilter || undefined,
+    page,
+    per_page: perPage,
+  });
+  const members = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const pages = data?.pages ?? 1;
 
+  const deleteMutation = useDeleteMember();
+
+  // Reset to page 1 when filters change
   useEffect(() => {
-    fetchMembers();
-  }, [statusFilter]);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchMembers();
-  };
+    setPage(1);
+  }, [statusFilter, debouncedSearch]);
 
   const handleDelete = async (id: number) => {
     try {
-      await membersApi.delete(id);
-      setMembers(members.filter((m) => m.id !== id));
+      await deleteMutation.mutateAsync(id);
       setDeleteConfirm(null);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '删除失败');
+    } catch {
+      // error available via deleteMutation.error
     }
   };
 
@@ -77,8 +74,7 @@ export default function MemberList() {
         updated: result.updated_count,
         errors: result.errors,
       });
-      // Refresh the list
-      fetchMembers();
+      await queryClient.invalidateQueries({ queryKey: memberKeys.lists() });
     } catch (err: any) {
       setImportResult({
         success: false,
@@ -99,7 +95,7 @@ export default function MemberList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">队员管理</h1>
           <p className="mt-1 text-sm text-gray-500">管理艺术团所有队员信息</p>
@@ -140,7 +136,7 @@ export default function MemberList() {
       {/* Filters */}
       <div className="card">
         <div className="card-body">
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -162,10 +158,7 @@ export default function MemberList() {
               <option value="active">在队</option>
               <option value="inactive">离队</option>
             </select>
-            <button type="submit" className="btn-primary">
-              搜索
-            </button>
-          </form>
+          </div>
         </div>
       </div>
 
@@ -203,10 +196,12 @@ export default function MemberList() {
       )}
 
       {/* Error message */}
-      {error && (
+      {(error || deleteMutation.error) && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
           <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />
-          <span className="text-sm text-red-700">{error}</span>
+          <span className="text-sm text-red-700">
+            {(error as any)?.response?.data?.error || (deleteMutation.error as any)?.response?.data?.error || '加载失败'}
+          </span>
         </div>
       )}
 
@@ -233,17 +228,14 @@ export default function MemberList() {
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={canEdit ? 12 : 11} className="text-center py-8">
-                    <div className="flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-                      <span className="ml-3 text-gray-500">加载中...</span>
-                    </div>
+                  <td colSpan={canEdit ? 12 : 11} className="p-6">
+                    <TableSkeleton columns={6} rows={5} />
                   </td>
                 </tr>
               ) : members.length === 0 ? (
                 <tr>
-                  <td colSpan={canEdit ? 12 : 11} className="text-center py-8 text-gray-500">
-                    暂无队员数据
+                  <td colSpan={canEdit ? 12 : 11}>
+                    <EmptyState icon={Users} title="暂无队员数据" />
                   </td>
                 </tr>
               ) : (
@@ -319,9 +311,15 @@ export default function MemberList() {
         </div>
       </div>
 
-      {/* Summary */}
-      {!isLoading && members.length > 0 && (
-        <div className="text-sm text-gray-500">共 {members.length} 名队员</div>
+      {/* Pagination */}
+      {!isLoading && (
+        <Pagination
+          page={page}
+          pages={pages}
+          total={total}
+          perPage={perPage}
+          onChange={setPage}
+        />
       )}
     </div>
   );

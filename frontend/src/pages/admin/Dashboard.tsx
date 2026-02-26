@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Users,
@@ -11,54 +10,15 @@ import {
   MapPin,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { dashboardApi } from '../../services/api';
-
-interface DashboardStats {
-  member_count: number;
-  teacher_count: number;
-  program_count: number;
-  week_rehearsal_count: number;
-}
-
-interface UpcomingRehearsal {
-  id: number;
-  program_name: string;
-  date: string;
-  start_time: string | null;
-  location: string | null;
-}
-
-interface RecentProgram {
-  id: number;
-  name: string;
-  category: string;
-  member_count: number;
-  rehearsal_count: number;
-}
+import { useDashboardStats } from '../../hooks';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [upcomingRehearsals, setUpcomingRehearsals] = useState<UpcomingRehearsal[]>([]);
-  const [recentPrograms, setRecentPrograms] = useState<RecentProgram[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data, isLoading } = useDashboardStats();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      const data = await dashboardApi.getStats();
-      setStats(data.stats);
-      setUpcomingRehearsals(data.upcoming_rehearsals);
-      setRecentPrograms(data.recent_programs);
-    } catch (err) {
-      console.error('Failed to fetch dashboard data:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const stats = data?.stats ?? null;
+  const upcomingRehearsals = data?.upcoming_rehearsals ?? [];
+  const recentPrograms = data?.recent_programs ?? [];
 
   const statCards = [
     {

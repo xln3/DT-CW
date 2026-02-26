@@ -1,59 +1,39 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, AlertCircle, FileText, DollarSign } from 'lucide-react';
-import { teachersApi } from '../../../services/api';
+import { Plus, Search, Edit2, Trash2, AlertCircle, FileText, DollarSign, Users } from 'lucide-react';
+import EmptyState from '../../../components/EmptyState';
+import TableSkeleton from '../../../components/TableSkeleton';
 import { useAuth } from '../../../contexts/AuthContext';
-import type { Teacher } from '../../../types';
+import { useTeachers, useDeleteTeacher } from '../../../hooks';
+import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 
 export default function TeacherList() {
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const { hasRole } = useAuth();
   const canEdit = hasRole('admin', 'committee');
+  const debouncedSearch = useDebouncedValue(search);
 
-  const fetchTeachers = async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const data = await teachersApi.list({
-        search: search || undefined,
-        status: statusFilter || undefined,
-      });
-      setTeachers(data);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '加载失败');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchTeachers();
-  }, [statusFilter]);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchTeachers();
-  };
+  const { data: teachers = [], isLoading, error } = useTeachers({
+    search: debouncedSearch || undefined,
+    status: statusFilter || undefined,
+  });
+  const deleteMutation = useDeleteTeacher();
 
   const handleDelete = async (id: number) => {
     try {
-      await teachersApi.delete(id);
-      setTeachers(teachers.filter((t) => t.id !== id));
+      await deleteMutation.mutateAsync(id);
       setDeleteConfirm(null);
-    } catch (err: any) {
-      setError(err.response?.data?.error || '删除失败');
+    } catch {
+      // error handled by React Query
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">教师管理</h1>
           <p className="mt-1 text-sm text-gray-500">管理艺术团所有教师信息</p>
@@ -79,7 +59,7 @@ export default function TeacherList() {
       {/* Filters */}
       <div className="card">
         <div className="card-body">
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -101,17 +81,16 @@ export default function TeacherList() {
               <option value="active">在职</option>
               <option value="inactive">离职</option>
             </select>
-            <button type="submit" className="btn-primary">
-              搜索
-            </button>
-          </form>
+          </div>
         </div>
       </div>
 
-      {error && (
+      {(error || deleteMutation.error) && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
           <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />
-          <span className="text-sm text-red-700">{error}</span>
+          <span className="text-sm text-red-700">
+            {(error as any)?.response?.data?.error || (deleteMutation.error as any)?.response?.data?.error || '加载失败'}
+          </span>
         </div>
       )}
 
@@ -131,17 +110,14 @@ export default function TeacherList() {
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={canEdit ? 5 : 4} className="text-center py-8">
-                    <div className="flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-                      <span className="ml-3 text-gray-500">加载中...</span>
-                    </div>
+                  <td colSpan={canEdit ? 5 : 4} className="p-6">
+                    <TableSkeleton columns={canEdit ? 5 : 4} rows={4} />
                   </td>
                 </tr>
               ) : teachers.length === 0 ? (
                 <tr>
-                  <td colSpan={canEdit ? 5 : 4} className="text-center py-8 text-gray-500">
-                    暂无教师数据
+                  <td colSpan={canEdit ? 5 : 4}>
+                    <EmptyState icon={Users} title="暂无教师数据" />
                   </td>
                 </tr>
               ) : (

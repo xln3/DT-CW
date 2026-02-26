@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Calendar, Users, Shield, ChevronRight } from 'lucide-react';
+import { Calendar, Users, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 
 export default function SettingsHub() {
@@ -24,15 +24,6 @@ export default function SettingsHub() {
       color: 'bg-green-500',
       visible: isCommittee,
     },
-    {
-      title: '权限说明',
-      description: '查看角色权限说明',
-      icon: Shield,
-      path: '#',
-      color: 'bg-purple-500',
-      visible: true,
-      disabled: true,
-    },
   ];
 
   const visibleItems = settingsItems.filter((item) => item.visible);
@@ -46,51 +37,26 @@ export default function SettingsHub() {
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {visibleItems.map((item) => (
-          <div key={item.title}>
-            {item.disabled ? (
-              <div className="card opacity-60 cursor-not-allowed">
-                <div className="card-body">
-                  <div className="flex items-start">
-                    <div
-                      className={`${item.color} p-3 rounded-lg text-white flex-shrink-0`}
-                    >
-                      <item.icon className="w-6 h-6" />
-                    </div>
-                    <div className="ml-4 flex-1">
-                      <h3 className="text-lg font-medium text-gray-900">
-                        {item.title}
-                      </h3>
-                      <p className="mt-1 text-sm text-gray-500">
-                        {item.description}
-                      </p>
-                      <p className="mt-2 text-xs text-gray-400">即将推出</p>
-                    </div>
-                  </div>
+          <Link key={item.title} to={item.path} className="card hover:shadow-md transition-shadow">
+            <div className="card-body">
+              <div className="flex items-start">
+                <div
+                  className={`${item.color} p-3 rounded-lg text-white flex-shrink-0`}
+                >
+                  <item.icon className="w-6 h-6" />
                 </div>
+                <div className="ml-4 flex-1">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {item.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {item.description}
+                  </p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400" />
               </div>
-            ) : (
-              <Link to={item.path} className="card hover:shadow-md transition-shadow">
-                <div className="card-body">
-                  <div className="flex items-start">
-                    <div
-                      className={`${item.color} p-3 rounded-lg text-white flex-shrink-0`}
-                    >
-                      <item.icon className="w-6 h-6" />
-                    </div>
-                    <div className="ml-4 flex-1">
-                      <h3 className="text-lg font-medium text-gray-900">
-                        {item.title}
-                      </h3>
-                      <p className="mt-1 text-sm text-gray-500">
-                        {item.description}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
-                  </div>
-                </div>
-              </Link>
-            )}
-          </div>
+            </div>
+          </Link>
         ))}
       </div>
 

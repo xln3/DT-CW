@@ -149,10 +149,12 @@ def _update_member_data(member, data, is_create=False):
 @members_bp.route('', methods=['GET'])
 @login_required
 def list_members():
-    """List all members."""
+    """List all members with optional pagination."""
     # Filter options
     status = request.args.get('status')
     search = request.args.get('search', '').strip()
+    page = request.args.get('page', type=int)
+    per_page = request.args.get('per_page', 20, type=int)
 
     query = Member.query
 
@@ -168,6 +170,24 @@ def list_members():
             )
         )
 
+    # If page param is provided, return paginated results
+    if page is not None:
+        # Get all for pinyin sorting, then paginate in-memory
+        members = query.all()
+        sorted_members = _sort_members_by_pinyin(members)
+        total = len(sorted_members)
+        start = (page - 1) * per_page
+        end = start + per_page
+        paged = sorted_members[start:end]
+        return jsonify({
+            'items': [m.to_dict() for m in paged],
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'pages': (total + per_page - 1) // per_page,
+        })
+
+    # No pagination — return all (backwards compatible)
     members = query.all()
     sorted_members = _sort_members_by_pinyin(members)
 

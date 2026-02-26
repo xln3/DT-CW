@@ -11,19 +11,18 @@ import {
   AlertCircle,
   Star,
   StarOff,
+  Download,
 } from 'lucide-react';
 import { programsApi, membersApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { Program, Member } from '../../../types';
 import { PROGRAM_CATEGORIES } from '../../../types';
+import { getAttendanceStyles } from '../../../utils/attendance';
+import type { AttendanceSegmentData } from '../../../utils/attendance';
+import MemberPicker from '../../../components/MemberPicker';
+import { exportAttendanceCsv } from '../../../utils/exportCsv';
 
-interface AttendanceData {
-  status: string;
-  has_leave: boolean;
-  leave_type: string | null;
-  detected_before: boolean;
-  detected_after: boolean;
-}
+type AttendanceData = AttendanceSegmentData;
 
 interface ProgramMemberData {
   member: Member;
@@ -50,7 +49,6 @@ export default function ProgramDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddMember, setShowAddMember] = useState(false);
-  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const [isAdding, setIsAdding] = useState(false);
 
   // Attendance matrix data
@@ -97,18 +95,16 @@ export default function ProgramDetail() {
   const handleOpenAddMember = async () => {
     await fetchAllMembers();
     setShowAddMember(true);
-    setSelectedMemberId(null);
   };
 
-  const handleAddMember = async () => {
-    if (!selectedMemberId) return;
-
+  const handleAddMembers = async (memberIds: number[]) => {
     setIsAdding(true);
     try {
-      await programsApi.addMember(Number(id), selectedMemberId);
+      for (const memberId of memberIds) {
+        await programsApi.addMember(Number(id), memberId);
+      }
       await fetchData();
       setShowAddMember(false);
-      setSelectedMemberId(null);
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } } };
       setError(error.response?.data?.error || '添加成员失败');
@@ -169,28 +165,9 @@ export default function ProgramDetail() {
     }
   };
 
-  // 根据考勤数据获取每个段的样式
-  const getSegmentStyle = (
-    isPresent: boolean,
-    hasLeave: boolean,
-    leaveType: string | null,
-    segment: 'before' | 'middle' | 'after'
-  ) => {
-    const label = segment === 'before' ? '签到' : segment === 'after' ? '签退' : '中间';
-
-    if (isPresent) {
-      return { colorClass: 'bg-green-500', tooltip: `${label}出勤` };
-    }
-    if (hasLeave && leaveType) {
-      return { colorClass: 'bg-blue-500', tooltip: `${label}请假` };
-    }
-    return { colorClass: 'bg-orange-500', tooltip: `${label}缺勤` };
-  };
-
   // 渲染三段式考勤状态
   const renderAttendanceSquares = (att: AttendanceData | null) => {
     if (att === null) {
-      // 成员当时不在节目中
       return (
         <div className="inline-flex items-center justify-center w-10" title="不在节目中">
           <span className="text-gray-300">—</span>
@@ -198,41 +175,15 @@ export default function ProgramDetail() {
       );
     }
 
-    let beforePresent = att.detected_before;
-    let afterPresent = att.detected_after;
-    let middlePresent = beforePresent || afterPresent;
-
-    // 根据状态推断
-    if (att.status === 'normal') {
-      beforePresent = true;
-      afterPresent = true;
-      middlePresent = true;
-    } else if (att.status === 'late') {
-      beforePresent = false;
-      afterPresent = true;
-      middlePresent = true;
-    } else if (att.status === 'early_leave') {
-      beforePresent = true;
-      afterPresent = false;
-      middlePresent = true;
-    } else if (att.status === 'absent') {
-      beforePresent = false;
-      afterPresent = false;
-      middlePresent = false;
-    }
-
-    const beforeStyle = getSegmentStyle(beforePresent, att.has_leave, att.leave_type, 'before');
-    const middleStyle = getSegmentStyle(middlePresent, att.has_leave, att.leave_type, 'middle');
-    const afterStyle = getSegmentStyle(afterPresent, att.has_leave, att.leave_type, 'after');
-
+    const styles = getAttendanceStyles(att);
     return (
       <div
         className="inline-flex items-center"
-        title={`${beforeStyle.tooltip} | ${middleStyle.tooltip} | ${afterStyle.tooltip}`}
+        title={`${styles.before.tooltip} | ${styles.middle.tooltip} | ${styles.after.tooltip}`}
       >
-        <div className={`w-1.5 h-4 rounded-l-sm ${beforeStyle.colorClass}`} />
-        <div className={`w-4 h-4 ${middleStyle.colorClass}`} />
-        <div className={`w-1.5 h-4 rounded-r-sm ${afterStyle.colorClass}`} />
+        <div className={`w-1.5 h-4 rounded-l-sm ${styles.before.colorClass}`} />
+        <div className={`w-4 h-4 ${styles.middle.colorClass}`} />
+        <div className={`w-1.5 h-4 rounded-r-sm ${styles.after.colorClass}`} />
       </div>
     );
   };
@@ -359,12 +310,30 @@ export default function ProgramDetail() {
         <div className="card-body">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-medium text-gray-900">成员考勤</h3>
-            {canEdit && (
-              <button onClick={handleOpenAddMember} className="btn-primary">
-                <UserPlus className="w-4 h-4 mr-2" />
-                添加成员
-              </button>
-            )}
+            <div className="flex items-center space-x-2">
+              {rehearsals.length > 0 && programMembers.length > 0 && (
+                <button
+                  onClick={() =>
+                    exportAttendanceCsv(
+                      programMembers.map((pm) => pm.member),
+                      rehearsals,
+                      attendanceMatrix,
+                      program?.name || '考勤'
+                    )
+                  }
+                  className="btn-secondary"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  导出
+                </button>
+              )}
+              {canEdit && (
+                <button onClick={handleOpenAddMember} className="btn-primary">
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  添加成员
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Legend */}
@@ -493,47 +462,12 @@ export default function ProgramDetail() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="px-6 py-4 space-y-4">
-              <div>
-                <label htmlFor="member" className="form-label">
-                  选择成员 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  id="member"
-                  className="form-input"
-                  value={selectedMemberId || ''}
-                  onChange={(e) => setSelectedMemberId(Number(e.target.value) || null)}
-                >
-                  <option value="">请选择成员</option>
-                  {allMembers.map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.name}
-                      {member.student_id ? ` (${member.student_id})` : ''}
-                    </option>
-                  ))}
-                </select>
-                {allMembers.length === 0 && (
-                  <p className="mt-1 text-sm text-gray-500">
-                    暂无可添加的成员，所有成员已在节目中
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="px-6 py-4 bg-gray-50 border-t flex justify-end space-x-3">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setShowAddMember(false)}
-              >
-                取消
-              </button>
-              <button
-                className="btn-primary"
-                onClick={handleAddMember}
-                disabled={!selectedMemberId || isAdding}
-              >
-                {isAdding ? '添加中...' : '添加'}
-              </button>
+            <div className="px-6 py-4">
+              <MemberPicker
+                members={allMembers}
+                onAdd={handleAddMembers}
+                isAdding={isAdding}
+              />
             </div>
           </div>
         </div>
