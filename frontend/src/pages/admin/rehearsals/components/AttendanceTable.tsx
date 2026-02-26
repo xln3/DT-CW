@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Edit2 } from 'lucide-react';
 import type { Attendance, AttendanceStatus } from '../../../../types';
 import { getAttendanceStyles } from '../../../../utils/attendance';
@@ -352,8 +352,8 @@ export default function AttendanceTable({
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {attendance.map((att) => (
-                    <>
-                      <tr key={att.member_id} className="hover:bg-gray-50">
+                    <React.Fragment key={att.member_id}>
+                      <tr className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="font-medium text-gray-900">
                             {att.member_name}
@@ -493,7 +493,7 @@ export default function AttendanceTable({
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>

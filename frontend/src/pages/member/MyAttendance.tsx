@@ -9,6 +9,7 @@ interface ProgramAttendance {
   total_rehearsals: number;
   normal_count: number;
   late_count: number;
+  early_leave_count: number;
   absent_count: number;
   leave_count: number;
   attendance_rate: number;
@@ -26,6 +27,7 @@ interface AttendanceData {
     total_rehearsals: number;
     normal_count: number;
     late_count: number;
+    early_leave_count: number;
     absent_count: number;
     leave_count: number;
     attendance_rate: number;
@@ -151,7 +153,7 @@ export default function MyAttendance() {
             <div className="card-body text-center">
               <div className="flex items-center justify-center">
                 <Clock className="w-5 h-5 text-yellow-600 mr-1" />
-                <span className="text-2xl font-bold text-gray-900">{stats.late_count}</span>
+                <span className="text-2xl font-bold text-gray-900">{stats.late_count + (stats.early_leave_count || 0)}</span>
               </div>
               <div className="text-sm text-gray-500 mt-1">迟到/早退</div>
             </div>
@@ -208,8 +210,8 @@ export default function MyAttendance() {
                       <div className="font-medium">{program.normal_count}</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-yellow-600">迟到</div>
-                      <div className="font-medium">{program.late_count}</div>
+                      <div className="text-yellow-600">迟到/早退</div>
+                      <div className="font-medium">{program.late_count + (program.early_leave_count || 0)}</div>
                     </div>
                     <div className="text-center">
                       <div className="text-red-600">缺勤</div>

@@ -108,7 +108,7 @@ const MonthView: React.FC<MonthViewProps> = ({
             <div
               key={day}
               className={`text-center text-sm font-medium py-2 ${
-                index === 0 || index === 6 ? 'text-red-600' : 'text-gray-700'
+                index === 5 || index === 6 ? 'text-red-600' : 'text-gray-700'
               }`}
             >
               {day}

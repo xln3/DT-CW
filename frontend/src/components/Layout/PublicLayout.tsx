@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Calendar, Users, LogIn } from 'lucide-react';
 
+const SITE_TITLE = 'THUDT 2026寒训';
+
 interface PublicLayoutProps {
   children: ReactNode;
 }
@@ -31,7 +33,7 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
                   <span className="text-white font-bold text-lg">DT</span>
                 </div>
                 <span className="text-xl font-bold text-gray-900">
-                  THUDT 2026寒训
+                  {SITE_TITLE}
                 </span>
               </Link>
             </div>
@@ -103,7 +105,7 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
       <footer className="bg-white border-t mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <p className="text-center text-sm text-gray-500">
-            THUDT 2026寒训 &copy; {new Date().getFullYear()}
+            {SITE_TITLE} &copy; {new Date().getFullYear()}
           </p>
         </div>
       </footer>

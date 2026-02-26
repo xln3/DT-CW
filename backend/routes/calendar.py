@@ -266,7 +266,7 @@ def update_event(event_id):
     if 'notify_members' in data:
         event.notify_members = data['notify_members']
 
-    if 'status' in data and user.is_admin_or_committee():
+    if 'status' in data and (user.is_admin() or user.is_committee()):
         event.status = data['status']
 
     event.updated_at = datetime.utcnow()
@@ -299,7 +299,7 @@ def delete_event(event_id):
     if event.program_id:
         if not check_program_permission(user, Permission.PROGRAM_EDIT, event.program_id):
             return jsonify({'error': '无权删除该事件'}), 403
-    elif not user.is_admin_or_committee():
+    elif not (user.is_admin() or user.is_committee()):
         return jsonify({'error': '无权删除全团事件'}), 403
 
     title = event.title
@@ -380,7 +380,7 @@ def send_event_notification(event_id):
     if event.program_id:
         if not check_program_permission(user, Permission.PROGRAM_EDIT, event.program_id):
             return jsonify({'error': '无权发送该事件的通知'}), 403
-    elif not user.is_admin_or_committee():
+    elif not (user.is_admin() or user.is_committee()):
         return jsonify({'error': '无权发送全团事件通知'}), 403
 
     # 发送通知

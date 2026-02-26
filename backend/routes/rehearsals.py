@@ -6,6 +6,7 @@ from database import db
 from models import Rehearsal, Program, Teacher, Attendance, AuditLog
 from auth.decorators import login_required, committee_required
 from auth.permissions import Permission, check_program_permission
+from utils.attendance import VALID_LEAVE_TYPES, VALID_STATUSES
 
 rehearsals_bp = Blueprint('rehearsals', __name__)
 
@@ -314,7 +315,13 @@ def update_attendance(rehearsal_id, member_id):
 
     if 'has_leave' in data:
         record.has_leave = bool(data['has_leave'])
-        record.leave_type = data.get('leave_type')
+        if record.has_leave:
+            leave_type = data.get('leave_type')
+            if leave_type not in VALID_LEAVE_TYPES:
+                return jsonify({'error': f'无效的请假类型，有效值: {", ".join(VALID_LEAVE_TYPES)}'}), 400
+            record.leave_type = leave_type
+        else:
+            record.leave_type = None
         record.leave_reason = data.get('leave_reason', '').strip() or None
 
     if 'manual_override' in data:
@@ -322,7 +329,10 @@ def update_attendance(rehearsal_id, member_id):
         record.override_reason = data.get('override_reason', '').strip() or None
 
         if record.manual_override and 'status' in data:
-            record.status = data['status']
+            status = data['status']
+            if status not in VALID_STATUSES:
+                return jsonify({'error': f'无效的考勤状态，有效值: {", ".join(VALID_STATUSES)}'}), 400
+            record.status = status
     else:
         # Recalculate status
         record.calculate_status()

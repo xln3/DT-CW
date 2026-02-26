@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime
 
 from database import db
-from models import Semester
+from models import Semester, VenueTimeSlot, Budget
 from auth.decorators import login_required, role_required
 
 semesters_bp = Blueprint('semesters', __name__)
@@ -131,6 +131,12 @@ def delete_semester(semester_id):
     # Check if semester has programs
     if semester.programs.count() > 0:
         return jsonify({'error': '该学期下有节目，无法删除'}), 400
+
+    if VenueTimeSlot.query.filter_by(semester_id=semester.id).count() > 0:
+        return jsonify({'error': '该学期下有场地时间段，无法删除'}), 400
+
+    if Budget.query.filter_by(semester_id=semester.id).count() > 0:
+        return jsonify({'error': '该学期下有预算记录，无法删除'}), 400
 
     db.session.delete(semester)
     db.session.commit()

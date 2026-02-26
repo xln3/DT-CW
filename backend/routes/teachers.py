@@ -2,7 +2,7 @@
 from flask import Blueprint, request, jsonify, g
 
 from database import db
-from models import Teacher, AuditLog
+from models import Teacher, Rehearsal, TeacherEntryApplication, TeacherPayment, PaymentSourceDetail, Expense, AuditLog
 from auth.decorators import login_required, committee_required
 from auth.permissions import Permission, check_permission
 
@@ -155,6 +155,13 @@ def delete_teacher(teacher_id):
     teacher = Teacher.query.get_or_404(teacher_id)
 
     name = teacher.name
+    Rehearsal.query.filter_by(teacher_id=teacher.id).update({'teacher_id': None})
+    Expense.query.filter_by(teacher_id=teacher.id).update({'teacher_id': None})
+    TeacherEntryApplication.query.filter_by(teacher_id=teacher.id).delete()
+    payment_ids = [p.id for p in TeacherPayment.query.filter_by(teacher_id=teacher.id).all()]
+    if payment_ids:
+        PaymentSourceDetail.query.filter(PaymentSourceDetail.payment_id.in_(payment_ids)).delete()
+        TeacherPayment.query.filter(TeacherPayment.id.in_(payment_ids)).delete()
     db.session.delete(teacher)
     db.session.commit()
 

@@ -1,5 +1,6 @@
 """Routes package."""
-from flask import Flask
+from flask import Flask, jsonify, request as flask_request
+from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 
 
 def register_blueprints(app: Flask):
@@ -21,6 +22,25 @@ def register_blueprints(app: Flask):
     from .budget import budget_bp
     from .public_schedule import public_schedule_bp
     from .member_portal import member_portal_bp
+
+    @app.before_request
+    def reject_member_from_admin():
+        """Reject member-role users from /api/admin/* routes."""
+        if not flask_request.path.startswith('/api/admin/'):
+            return None
+        from models import User
+        try:
+            verify_jwt_in_request()
+        except Exception:
+            return jsonify({'error': '请先登录'}), 401
+        user_id = get_jwt_identity()
+        user = User.query.get(int(user_id))
+        if not user:
+            return jsonify({'error': '用户不存在'}), 401
+        if user.status != 'active':
+            return jsonify({'error': '账号已被禁用'}), 403
+        if user.role == User.ROLE_MEMBER:
+            return jsonify({'error': '权限不足'}), 403
 
     # Auth routes
     app.register_blueprint(auth_bp, url_prefix='/api/auth')

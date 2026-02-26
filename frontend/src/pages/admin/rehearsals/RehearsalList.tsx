@@ -204,28 +204,28 @@ export default function RehearsalList() {
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => navigateWeek(-1)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded flex-shrink-0"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 min-w-0">
                 <input
                   type="date"
-                  className="form-input"
+                  className="form-input w-full sm:w-auto"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
                 />
-                <span className="text-gray-500">至</span>
+                <span className="text-gray-500 hidden sm:inline">至</span>
                 <input
                   type="date"
-                  className="form-input"
+                  className="form-input w-full sm:w-auto"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
                 />
               </div>
               <button
                 onClick={() => navigateWeek(1)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded flex-shrink-0"
               >
                 <ChevronRight className="w-5 h-5" />
               </button>

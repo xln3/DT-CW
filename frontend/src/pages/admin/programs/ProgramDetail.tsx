@@ -100,9 +100,7 @@ export default function ProgramDetail() {
   const handleAddMembers = async (memberIds: number[]) => {
     setIsAdding(true);
     try {
-      for (const memberId of memberIds) {
-        await programsApi.addMember(Number(id), memberId);
-      }
+      await programsApi.batchAddMembers(Number(id), memberIds);
       await fetchData();
       setShowAddMember(false);
     } catch (err: unknown) {
@@ -219,7 +217,7 @@ export default function ProgramDetail() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center space-x-4">
           <button
             onClick={() => navigate('/admin/programs')}
@@ -228,8 +226,8 @@ export default function ProgramDetail() {
             <ArrowLeft className="w-6 h-6" />
           </button>
           <div>
-            <div className="flex items-center space-x-3">
-              <h1 className="text-2xl font-bold text-gray-900">{program.name}</h1>
+            <div className="flex items-center space-x-3 flex-wrap gap-y-1">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{program.name}</h1>
               {getStatusBadge(program.status)}
             </div>
             <p className="mt-1 text-sm text-gray-500">
@@ -238,7 +236,7 @@ export default function ProgramDetail() {
           </div>
         </div>
         {canEdit && (
-          <Link to={`/admin/programs/${id}/edit`} className="btn-primary">
+          <Link to={`/admin/programs/${id}/edit`} className="btn-primary self-start sm:self-auto">
             <Edit2 className="w-4 h-4 mr-2" />
             编辑
           </Link>
@@ -308,7 +306,7 @@ export default function ProgramDetail() {
       {/* Attendance Matrix */}
       <div className="card">
         <div className="card-body">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <h3 className="text-lg font-medium text-gray-900">成员考勤</h3>
             <div className="flex items-center space-x-2">
               {rehearsals.length > 0 && programMembers.length > 0 && (
@@ -337,7 +335,7 @@ export default function ProgramDetail() {
           </div>
 
           {/* Legend */}
-          <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 text-sm text-gray-600">
             <div className="flex items-center space-x-1">
               <div className="w-3 h-3 bg-green-500 rounded-sm"></div>
               <span>出勤</span>

@@ -64,7 +64,6 @@ export default function MemberList() {
 
     setIsImporting(true);
     setImportResult(null);
-    setError('');
 
     try {
       const result = await membersApi.importCsv(file);
@@ -212,15 +211,15 @@ export default function MemberList() {
             <thead>
               <tr>
                 <th>姓名</th>
-                <th>性别</th>
+                <th className="hidden md:table-cell">性别</th>
                 <th>学号</th>
                 <th>院系</th>
-                <th>班级</th>
-                <th>手机号</th>
-                <th>入队年份</th>
-                <th>梯队</th>
-                <th>职务</th>
-                <th>毕业</th>
+                <th className="hidden lg:table-cell">班级</th>
+                <th className="hidden lg:table-cell">手机号</th>
+                <th className="hidden md:table-cell">入队年份</th>
+                <th className="hidden lg:table-cell">梯队</th>
+                <th className="hidden lg:table-cell">职务</th>
+                <th className="hidden xl:table-cell">毕业</th>
                 <th>状态</th>
                 {canEdit && <th className="text-right">操作</th>}
               </tr>
@@ -242,15 +241,15 @@ export default function MemberList() {
                 members.map((member) => (
                   <tr key={member.id} className="hover:bg-gray-50">
                     <td className="font-medium whitespace-nowrap">{member.name}</td>
-                    <td>{member.gender || '-'}</td>
+                    <td className="hidden md:table-cell">{member.gender || '-'}</td>
                     <td>{member.student_id || '-'}</td>
                     <td className="max-w-32 truncate" title={member.department || ''}>{member.department || '-'}</td>
-                    <td>{member.class_name || '-'}</td>
-                    <td>{member.phone || '-'}</td>
-                    <td>{member.join_year || '-'}</td>
-                    <td>{member.team_level || '-'}</td>
-                    <td>{member.team_role || '-'}</td>
-                    <td>
+                    <td className="hidden lg:table-cell">{member.class_name || '-'}</td>
+                    <td className="hidden lg:table-cell">{member.phone || '-'}</td>
+                    <td className="hidden md:table-cell">{member.join_year || '-'}</td>
+                    <td className="hidden lg:table-cell">{member.team_level || '-'}</td>
+                    <td className="hidden lg:table-cell">{member.team_role || '-'}</td>
+                    <td className="hidden xl:table-cell">
                       {member.graduating_this_semester ? (
                         <span className="text-orange-600">是</span>
                       ) : '-'}

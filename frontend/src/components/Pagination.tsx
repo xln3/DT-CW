@@ -15,7 +15,7 @@ export default function Pagination({ page, pages, total, perPage, onChange }: Pa
   const end = Math.min(page * perPage, total);
 
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
       <span className="text-sm text-gray-500">
         共 {total} 条，显示 {start}-{end}
       </span>
@@ -23,7 +23,7 @@ export default function Pagination({ page, pages, total, perPage, onChange }: Pa
         <button
           onClick={() => onChange(page - 1)}
           disabled={page <= 1}
-          className="p-2 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-1.5 sm:p-2 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -43,14 +43,14 @@ export default function Pagination({ page, pages, total, perPage, onChange }: Pa
           }, [])
           .map((item, idx) =>
             item === '...' ? (
-              <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">
+              <span key={`ellipsis-${idx}`} className="px-1 sm:px-2 text-gray-400">
                 ...
               </span>
             ) : (
               <button
                 key={item}
                 onClick={() => onChange(item as number)}
-                className={`px-3 py-1 rounded text-sm ${
+                className={`px-2 py-1 sm:px-3 rounded text-sm ${
                   item === page
                     ? 'bg-primary-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -63,7 +63,7 @@ export default function Pagination({ page, pages, total, perPage, onChange }: Pa
         <button
           onClick={() => onChange(page + 1)}
           disabled={page >= pages}
-          className="p-2 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-1.5 sm:p-2 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <ChevronRight className="w-4 h-4" />
         </button>

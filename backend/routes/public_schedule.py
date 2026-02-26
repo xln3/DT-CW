@@ -136,6 +136,15 @@ def week_schedule():
     })
 
 
+@public_schedule_bp.route('/current-semester', methods=['GET'])
+def current_semester():
+    """Get the current semester (public, no auth required)."""
+    semester = Semester.get_current()
+    if not semester:
+        return jsonify({'semester': None})
+    return jsonify({'semester': semester.to_dict()})
+
+
 @public_schedule_bp.route('/day/<date>', methods=['GET'])
 def day_schedule(date):
     """Get schedule for a specific day.

@@ -557,7 +557,6 @@ def import_programs_csv():
                 if not member:
                     member = Member(
                         name=member_name,
-                        gender='女',  # Default female
                         status='active'
                     )
                     db.session.add(member)
@@ -626,9 +625,20 @@ def import_programs_csv():
 
 
 def _sync_member_attendance(program_id, member_id):
-    """Create attendance records for a member for all existing rehearsals of the program."""
-    rehearsals = Rehearsal.query.filter_by(program_id=program_id).all()
+    """Create absent records for non-cancelled rehearsals after the member's join date."""
+    pm = ProgramMember.query.filter_by(
+        program_id=program_id,
+        member_id=member_id
+    ).first()
+    joined_date = pm.joined_at.date() if pm and pm.joined_at else None
+
+    rehearsals = Rehearsal.query.filter_by(program_id=program_id).filter(
+        Rehearsal.status != 'cancelled'
+    ).all()
+
     for rehearsal in rehearsals:
+        if joined_date and rehearsal.scheduled_date < joined_date:
+            continue
         existing = Attendance.query.filter_by(
             rehearsal_id=rehearsal.id,
             member_id=member_id

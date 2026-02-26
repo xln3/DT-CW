@@ -142,6 +142,12 @@ def admin_required(f):
     return role_required(User.ROLE_ADMIN)(f)
 
 
+def staff_required(f):
+    """Decorator for admin routes that should exclude member-role users.
+    Allows admin, committee, and program_manager."""
+    return role_required(User.ROLE_ADMIN, User.ROLE_COMMITTEE, User.ROLE_PROGRAM_MANAGER)(f)
+
+
 def committee_required(f):
     """Shortcut decorator for committee or admin routes."""
     return role_required(User.ROLE_ADMIN, User.ROLE_COMMITTEE)(f)

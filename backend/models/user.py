@@ -89,6 +89,10 @@ class User(db.Model):
         if include_email:
             data['email'] = self.email
             data['phone'] = self.phone
+        if self.role == self.ROLE_PROGRAM_MANAGER:
+            data['managed_program_ids'] = [
+                mp.program_id for mp in self.managed_programs
+            ]
         return data
 
 

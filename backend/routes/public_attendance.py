@@ -1,34 +1,9 @@
 """Public attendance display routes (no authentication required)."""
-from datetime import datetime
 from flask import Blueprint, request, jsonify
 
 from database import db
 from models import Program, Member, Rehearsal, Attendance, Semester, ProgramMember
-
-
-def is_rehearsal_completed(rehearsal):
-    """Check if a rehearsal is completed (not cancelled and time has passed)."""
-    if rehearsal.status == 'cancelled':
-        return False
-    now = datetime.now()
-    today = now.date()
-    current_time = now.time()
-
-    if rehearsal.scheduled_date < today:
-        return True
-    elif rehearsal.scheduled_date == today and rehearsal.scheduled_end_time:
-        return rehearsal.scheduled_end_time <= current_time
-    return False
-
-
-def counts_for_attendance(rehearsal):
-    """Check if a rehearsal should be counted for attendance rate calculation."""
-    # Must be completed and not excluded from attendance
-    if not is_rehearsal_completed(rehearsal):
-        return False
-    # Check counts_towards_attendance field (default to True if None)
-    counts = rehearsal.counts_towards_attendance
-    return counts if counts is not None else True
+from utils.attendance import is_rehearsal_completed, counts_for_attendance, ATTENDED_STATUSES
 
 public_attendance_bp = Blueprint('public_attendance', __name__)
 
@@ -103,12 +78,7 @@ def attendance_overview():
         for rehearsal in counted_rehearsals:
             for record in rehearsal.attendance_records:
                 total_records += 1
-                if record.status in [
-                    Attendance.STATUS_NORMAL,
-                    Attendance.STATUS_LEAVE_ABSENT,
-                    Attendance.STATUS_LEAVE_LATE,
-                    Attendance.STATUS_LEAVE_EARLY
-                ]:
+                if record.status in ATTENDED_STATUSES:
                     present_count += 1
 
         attendance_rate = (present_count / total_records * 100) if total_records > 0 else 100.0
@@ -172,6 +142,7 @@ def program_attendance(program_id):
             'total_rehearsals': 0,
             'normal_count': 0,
             'late_count': 0,
+            'early_leave_count': 0,
             'absent_count': 0,
             'leave_count': 0,
             'attendance_rate': 100.0
@@ -190,7 +161,9 @@ def program_attendance(program_id):
                     stats['normal_count'] += 1
                 elif record.status == Attendance.STATUS_LATE:
                     stats['late_count'] += 1
-                elif record.status in [Attendance.STATUS_EARLY_LEAVE, Attendance.STATUS_ABSENT]:
+                elif record.status == Attendance.STATUS_EARLY_LEAVE:
+                    stats['early_leave_count'] += 1
+                elif record.status == Attendance.STATUS_ABSENT:
                     stats['absent_count'] += 1
                 elif record.status in [
                     Attendance.STATUS_LEAVE_ABSENT,
@@ -201,7 +174,8 @@ def program_attendance(program_id):
 
         # Calculate attendance rate
         if stats['total_rehearsals'] > 0:
-            effective = stats['normal_count'] + stats['leave_count']
+            effective = (stats['normal_count'] + stats['late_count']
+                         + stats['early_leave_count'] + stats['leave_count'])
             stats['attendance_rate'] = round(effective / stats['total_rehearsals'] * 100, 1)
 
         member_list.append(stats)
@@ -211,12 +185,7 @@ def program_attendance(program_id):
     for rehearsal in completed_rehearsals[:20]:  # Last 20 completed rehearsals
         records = rehearsal.attendance_records.all()
         total = len(records)
-        present = sum(1 for r in records if r.status in [
-            Attendance.STATUS_NORMAL,
-            Attendance.STATUS_LEAVE_ABSENT,
-            Attendance.STATUS_LEAVE_LATE,
-            Attendance.STATUS_LEAVE_EARLY
-        ])
+        present = sum(1 for r in records if r.status in ATTENDED_STATUSES)
 
         # Check if this rehearsal counts towards attendance
         counts = rehearsal.counts_towards_attendance
@@ -443,13 +412,7 @@ def program_attendance_matrix(program_id):
 
             if record:
                 total += 1
-                # Attended = normal + any leave status
-                if record.status in [
-                    Attendance.STATUS_NORMAL,
-                    Attendance.STATUS_LEAVE_ABSENT,
-                    Attendance.STATUS_LEAVE_LATE,
-                    Attendance.STATUS_LEAVE_EARLY
-                ]:
+                if record.status in ATTENDED_STATUSES:
                     attended += 1
 
         summary[member_id] = {
@@ -504,6 +467,7 @@ def member_attendance():
             'total_rehearsals': 0,
             'normal_count': 0,
             'late_count': 0,
+            'early_leave_count': 0,
             'absent_count': 0,
             'leave_count': 0
         }
@@ -526,7 +490,8 @@ def member_attendance():
             total = len(records)
             normal = sum(1 for r in records if r.status == Attendance.STATUS_NORMAL)
             late = sum(1 for r in records if r.status == Attendance.STATUS_LATE)
-            absent = sum(1 for r in records if r.status in [Attendance.STATUS_ABSENT, Attendance.STATUS_EARLY_LEAVE])
+            early_leave = sum(1 for r in records if r.status == Attendance.STATUS_EARLY_LEAVE)
+            absent = sum(1 for r in records if r.status == Attendance.STATUS_ABSENT)
             leave = sum(1 for r in records if r.status in [
                 Attendance.STATUS_LEAVE_ABSENT,
                 Attendance.STATUS_LEAVE_LATE,
@@ -537,24 +502,28 @@ def member_attendance():
             total_stats['total_rehearsals'] += total
             total_stats['normal_count'] += normal
             total_stats['late_count'] += late
+            total_stats['early_leave_count'] += early_leave
             total_stats['absent_count'] += absent
             total_stats['leave_count'] += leave
 
+            effective = normal + late + early_leave + leave
             programs_data.append({
                 'program_id': program.id,
                 'program_name': program.name,
                 'total_rehearsals': total,
                 'normal_count': normal,
                 'late_count': late,
+                'early_leave_count': early_leave,
                 'absent_count': absent,
                 'leave_count': leave,
-                'attendance_rate': round((normal + leave) / total * 100, 1) if total > 0 else 100.0
+                'attendance_rate': round(effective / total * 100, 1) if total > 0 else 100.0
             })
 
         # Calculate overall rate
         overall_rate = 100.0
         if total_stats['total_rehearsals'] > 0:
-            effective = total_stats['normal_count'] + total_stats['leave_count']
+            effective = (total_stats['normal_count'] + total_stats['late_count']
+                         + total_stats['early_leave_count'] + total_stats['leave_count'])
             overall_rate = round(effective / total_stats['total_rehearsals'] * 100, 1)
 
         results.append({
@@ -569,6 +538,7 @@ def member_attendance():
                 'total_rehearsals': total_stats['total_rehearsals'],
                 'normal_count': total_stats['normal_count'],
                 'late_count': total_stats['late_count'],
+                'early_leave_count': total_stats['early_leave_count'],
                 'absent_count': total_stats['absent_count'],
                 'leave_count': total_stats['leave_count'],
                 'attendance_rate': overall_rate

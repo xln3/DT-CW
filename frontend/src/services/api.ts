@@ -869,7 +869,7 @@ export const publicScheduleApi = {
   },
 
   getCurrentSemester: async () => {
-    const response = await api.get<{ semester: Semester | null }>('/admin/semesters/current');
+    const response = await api.get<{ semester: Semester | null }>('/public/schedule/current-semester');
     return response.data.semester;
   },
 };
@@ -1203,6 +1203,7 @@ export const memberPortalApi = {
         total_rehearsals: number;
         normal_count: number;
         late_count: number;
+        early_leave_count: number;
         absent_count: number;
         leave_count: number;
         attendance_rate: number;
@@ -1211,6 +1212,7 @@ export const memberPortalApi = {
         total_rehearsals: number;
         normal_count: number;
         late_count: number;
+        early_leave_count: number;
         absent_count: number;
         leave_count: number;
         attendance_rate: number;

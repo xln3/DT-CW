@@ -217,11 +217,9 @@ def create_member():
     if not name:
         return jsonify({'error': '姓名不能为空'}), 400
 
-    # Check if member with same name exists - if so, update instead
     existing = Member.query.filter_by(name=name).first()
     if existing:
-        # Update existing member
-        return _update_member_data(existing, data, is_create=False)
+        return jsonify({'error': f'已存在同名成员: {name}', 'existing_id': existing.id}), 409
 
     # Parse date field
     birth_date = None
@@ -389,6 +387,7 @@ def delete_member(member_id):
     member = Member.query.get_or_404(member_id)
 
     name = member.name
+    User.query.filter_by(member_id=member.id).update({'member_id': None})
     db.session.delete(member)
     db.session.commit()
 
@@ -566,6 +565,7 @@ def import_members_csv():
         skipped_count = 0
         errors = []
         row_num = 1  # Header is row 0
+        imported_members = []
 
         for row in reader:
             row_num += 1
@@ -622,16 +622,17 @@ def import_members_csv():
                 else:
                     updated_count += 1
 
+                imported_members.append(member)
+
             except Exception as e:
                 errors.append(f'第{row_num}行: 处理错误 - {str(e)}')
                 continue
 
         db.session.commit()
 
-        # Create user accounts for all members with student_id
+        # Create user accounts only for members imported in this batch
         users_created = 0
-        all_members = Member.query.all()
-        for member in all_members:
+        for member in imported_members:
             if member.student_id and not User.query.filter_by(username=member.name).first():
                 user_account = _create_user_for_member(member)
                 if user_account:

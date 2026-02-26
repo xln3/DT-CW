@@ -9,6 +9,7 @@ export interface User {
   status: 'active' | 'inactive';
   last_login_at?: string;
   created_at: string;
+  managed_program_ids?: number[];
 }
 
 export interface AuthState {
@@ -189,6 +190,7 @@ export interface ApiResponse<T> {
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
+  pages: number;
   page: number;
   per_page: number;
 }

@@ -15,6 +15,7 @@ interface MemberResult {
     total_rehearsals: number;
     normal_count: number;
     late_count: number;
+    early_leave_count: number;
     absent_count: number;
     leave_count: number;
     attendance_rate: number;
@@ -23,6 +24,7 @@ interface MemberResult {
     total_rehearsals: number;
     normal_count: number;
     late_count: number;
+    early_leave_count: number;
     absent_count: number;
     leave_count: number;
     attendance_rate: number;
@@ -181,9 +183,9 @@ export default function AttendanceSearch() {
                     </div>
                     <div className="text-center p-3 bg-yellow-50 rounded-lg">
                       <p className="text-2xl font-bold text-yellow-600">
-                        {result.overall_stats.late_count}
+                        {result.overall_stats.late_count + (result.overall_stats.early_leave_count || 0)}
                       </p>
-                      <p className="text-xs text-gray-500">迟到</p>
+                      <p className="text-xs text-gray-500">迟到/早退</p>
                     </div>
                     <div className="text-center p-3 bg-red-50 rounded-lg">
                       <p className="text-2xl font-bold text-red-600">
@@ -230,7 +232,7 @@ export default function AttendanceSearch() {
                                 正常 {program.normal_count}
                               </span>
                               <span className="text-yellow-600">
-                                迟到 {program.late_count}
+                                迟到/早退 {program.late_count + (program.early_leave_count || 0)}
                               </span>
                               <span className="text-red-600">
                                 缺勤 {program.absent_count}

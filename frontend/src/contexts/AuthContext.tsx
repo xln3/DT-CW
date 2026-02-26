@@ -74,12 +74,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return roles.includes(user.role);
   };
 
-  const canManageProgram = (_programId: number) => {
+  const canManageProgram = (programId: number) => {
     if (!user) return false;
     if (user.role === 'admin' || user.role === 'committee') return true;
-    // For program managers, this would need to be checked against their assigned programs
-    // This is a simplified version - full implementation would track assigned programs
-    return user.role === 'program_manager';
+    if (user.role === 'program_manager') {
+      return user.managed_program_ids?.includes(programId) ?? false;
+    }
+    return false;
   };
 
   const refreshUser = async () => {

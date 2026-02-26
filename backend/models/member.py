@@ -36,9 +36,12 @@ class Member(db.Model):
     graduating_this_semester = db.Column(db.Boolean, default=False)  # 本学期毕业
 
     # Relationships
-    program_memberships = db.relationship('ProgramMember', back_populates='member', lazy='dynamic')
-    face_vectors = db.relationship('FaceVector', back_populates='member', lazy='dynamic')
-    attendance_records = db.relationship('Attendance', back_populates='member', lazy='dynamic')
+    program_memberships = db.relationship('ProgramMember', back_populates='member', lazy='select',
+                                            cascade='all, delete-orphan')
+    face_vectors = db.relationship('FaceVector', back_populates='member', lazy='select',
+                                    cascade='all, delete-orphan')
+    attendance_records = db.relationship('Attendance', back_populates='member', lazy='select',
+                                          cascade='all, delete-orphan')
 
     STATUS_ACTIVE = 'active'
     STATUS_INACTIVE = 'inactive'
@@ -75,10 +78,10 @@ class Member(db.Model):
         }
         if include_programs:
             data['programs'] = [
-                pm.program.to_dict() for pm in self.program_memberships.filter_by(status='active')
+                pm.program.to_dict() for pm in self.program_memberships if pm.status == 'active'
             ]
         return data
 
     def get_active_programs(self):
         """Get all active programs this member belongs to."""
-        return [pm.program for pm in self.program_memberships.filter_by(status='active')]
+        return [pm.program for pm in self.program_memberships if pm.status == 'active']
