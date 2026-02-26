@@ -1,4 +1,4 @@
-"""Program and ProgramMember models."""
+"""Program, ProgramMember, and ProgramTeacher models."""
 from datetime import datetime, date, time as time_type
 from database import db
 
@@ -25,6 +25,8 @@ class Program(db.Model):
                                  cascade='all, delete-orphan')
     managers = db.relationship('UserProgram', backref='program', lazy='dynamic',
                                cascade='all, delete-orphan')
+    teacher_associations = db.relationship('ProgramTeacher', back_populates='program',
+                                           lazy='select', cascade='all, delete-orphan')
 
     # Category constants
     CATEGORY_DANCE = 'dance'
@@ -81,6 +83,8 @@ class Program(db.Model):
             'member_count': self.members.filter_by(status='active').count(),
             'rehearsal_count': total_rehearsals,
             'completed_rehearsal_count': completed_count,
+            'teacher_ids': [pt.teacher_id for pt in self.teacher_associations],
+            'teacher_names': [pt.teacher.name for pt in self.teacher_associations if pt.teacher],
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -109,6 +113,7 @@ class ProgramMember(db.Model):
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     left_at = db.Column(db.DateTime)
     status = db.Column(db.String(20), default='active')  # active/left
+    change_reason = db.Column(db.Text)  # Reason for leaving the program
 
     # Relationships
     program = db.relationship('Program', back_populates='members')
@@ -140,4 +145,23 @@ class ProgramMember(db.Model):
             'joined_at': self.joined_at.isoformat() if self.joined_at else None,
             'left_at': self.left_at.isoformat() if self.left_at else None,
             'status': self.status,
+            'change_reason': self.change_reason,
         }
+
+
+class ProgramTeacher(db.Model):
+    """Association between programs and teachers."""
+    __tablename__ = 'program_teachers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(db.Integer, db.ForeignKey('programs.id'), nullable=False)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('teachers.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    program = db.relationship('Program', back_populates='teacher_associations')
+    teacher = db.relationship('Teacher', back_populates='program_associations')
+
+    __table_args__ = (
+        db.UniqueConstraint('program_id', 'teacher_id', name='unique_program_teacher'),
+    )

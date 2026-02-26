@@ -46,8 +46,23 @@ class Member(db.Model):
     STATUS_ACTIVE = 'active'
     STATUS_INACTIVE = 'inactive'
 
-    def to_dict(self, include_programs=False):
-        """Convert to dictionary."""
+    def to_dict(self, include_programs=False, brief=False):
+        """Convert to dictionary.
+
+        Args:
+            include_programs: Include active program list
+            brief: Return only essential fields (for non-admin users)
+        """
+        if brief:
+            return {
+                'id': self.id,
+                'name': self.name,
+                'gender': self.gender,
+                'department': self.department,
+                'phone': self.phone,
+                'birth_date': self.birth_date.isoformat() if self.birth_date else None,
+                'status': self.status,
+            }
         data = {
             'id': self.id,
             'name': self.name,

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, AlertCircle } from 'lucide-react';
-import { programsApi } from '../../../services/api';
-import type { ProgramForm as ProgramFormType } from '../../../types';
+import { programsApi, teachersApi } from '../../../services/api';
+import type { ProgramForm as ProgramFormType, Teacher } from '../../../types';
 
 const PRESET_COLORS = [
   { value: '#3498DB', label: '蓝色' },
@@ -23,19 +23,31 @@ export default function ProgramForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [form, setForm] = useState<ProgramFormType>({
     name: '',
     category: 'dance',  // Default to dance, only type needed
     description: '',
     display_color: '#3498DB',
     status: 'active',
+    teacher_ids: [],
   });
 
   useEffect(() => {
+    fetchTeachers();
     if (isEdit) {
       fetchProgram();
     }
   }, [id]);
+
+  const fetchTeachers = async () => {
+    try {
+      const data = await teachersApi.list({ status: 'active' });
+      setTeachers(data);
+    } catch {
+      // Non-critical
+    }
+  };
 
   const fetchProgram = async () => {
     setIsLoading(true);
@@ -47,6 +59,7 @@ export default function ProgramForm() {
         description: program.description || '',
         display_color: program.display_color || '#3498DB',
         status: program.status,
+        teacher_ids: program.teacher_ids || [],
       });
     } catch (err: any) {
       setError(err.response?.data?.error || '加载失败');
@@ -210,6 +223,37 @@ export default function ProgramForm() {
               placeholder="输入节目描述..."
             />
           </div>
+
+          {/* Teacher binding */}
+          {teachers.length > 0 && (
+            <div>
+              <label className="form-label">绑定教师</label>
+              <div className="flex flex-wrap gap-3">
+                {teachers.map((teacher) => (
+                  <label key={teacher.id} className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.teacher_ids?.includes(teacher.id) || false}
+                      onChange={(e) => {
+                        const ids = form.teacher_ids || [];
+                        setForm({
+                          ...form,
+                          teacher_ids: e.target.checked
+                            ? [...ids, teacher.id]
+                            : ids.filter((tid) => tid !== teacher.id),
+                        });
+                      }}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">
+                      {teacher.name}{teacher.specialty ? ` (${teacher.specialty})` : ''}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">选择负责该节目的教师，排练时会优先显示</p>
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-4 bg-gray-50 border-t flex justify-end space-x-3">

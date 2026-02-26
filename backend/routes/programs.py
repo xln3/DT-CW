@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify, g
 from pypinyin import lazy_pinyin
 
 from database import db
-from models import Program, ProgramMember, Member, Semester, AuditLog, User, Rehearsal, Attendance
+from models import Program, ProgramMember, ProgramTeacher, Member, Teacher, Semester, AuditLog, User, Rehearsal, Attendance
 from auth.decorators import login_required, committee_required
 from auth.permissions import Permission, check_program_permission
 
@@ -96,6 +96,14 @@ def create_program():
     )
 
     db.session.add(program)
+    db.session.flush()
+
+    # Bind teachers
+    teacher_ids = data.get('teacher_ids', [])
+    for tid in teacher_ids:
+        if Teacher.query.get(tid):
+            db.session.add(ProgramTeacher(program_id=program.id, teacher_id=tid))
+
     db.session.commit()
 
     # Log
@@ -151,6 +159,10 @@ def update_program(program_id):
             return jsonify({'error': '无效的状态'}), 400
         program.status = status
 
+    # Update teacher bindings
+    if 'teacher_ids' in data:
+        _sync_program_teachers(program, data['teacher_ids'])
+
     db.session.commit()
 
     # Log
@@ -204,15 +216,20 @@ def get_program_members(program_id):
     if user.is_program_manager() and not user.can_manage_program(program_id):
         return jsonify({'error': '无权访问该节目'}), 403
 
+    include_left = request.args.get('include_left', 'false').lower() == 'true'
     status = request.args.get('status', 'active')
     members = program.members.filter_by(status=status).all()
 
     # Sort: leaders first, then by pinyin
     sorted_members = _sort_members_by_pinyin(members)
 
-    return jsonify({
-        'members': [pm.to_dict() for pm in sorted_members]
-    })
+    result = {'members': [pm.to_dict() for pm in sorted_members]}
+
+    if include_left:
+        left_members = program.members.filter_by(status='left').all()
+        result['left_members'] = [pm.to_dict() for pm in left_members]
+
+    return jsonify(result)
 
 
 @programs_bp.route('/<int:program_id>/members', methods=['POST'])
@@ -347,6 +364,12 @@ def remove_program_member(program_id, member_id):
     from datetime import datetime
     pm.status = 'left'
     pm.left_at = datetime.utcnow()
+
+    # Accept optional change_reason from request body
+    body = request.get_json(silent=True)
+    if body and body.get('change_reason'):
+        pm.change_reason = body['change_reason'].strip()
+
     db.session.commit()
 
     return jsonify({'message': '成员已移除'})
@@ -651,6 +674,45 @@ def _sync_member_attendance(program_id, member_id):
             )
             db.session.add(record)
     db.session.commit()
+
+
+def _sync_program_teachers(program, teacher_ids):
+    """Replace program's teacher bindings with the given teacher_ids."""
+    existing = {pt.teacher_id for pt in program.teacher_associations}
+    desired = set(teacher_ids)
+
+    # Remove old
+    for pt in list(program.teacher_associations):
+        if pt.teacher_id not in desired:
+            db.session.delete(pt)
+
+    # Add new
+    for tid in desired - existing:
+        if Teacher.query.get(tid):
+            db.session.add(ProgramTeacher(program_id=program.id, teacher_id=tid))
+
+
+@programs_bp.route('/<int:program_id>/teachers', methods=['PUT'])
+@login_required
+def set_program_teachers(program_id):
+    """Set the teacher list for a program."""
+    program = Program.query.get_or_404(program_id)
+    user = g.current_user
+
+    if not check_program_permission(user, Permission.PROGRAM_EDIT, program_id):
+        return jsonify({'error': '无权修改该节目'}), 403
+
+    data = request.get_json()
+    if not data or 'teacher_ids' not in data:
+        return jsonify({'error': '请提供老师列表'}), 400
+
+    _sync_program_teachers(program, data['teacher_ids'])
+    db.session.commit()
+
+    return jsonify({
+        'message': '老师绑定更新成功',
+        'program': program.to_dict()
+    })
 
 
 def _sort_members_by_pinyin(program_members):

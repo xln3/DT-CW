@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 export default function MemberList() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [sortBy, setSortBy] = useState('pinyin');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const perPage = 20;
@@ -28,13 +29,15 @@ export default function MemberList() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { hasRole } = useAuth();
-  const canEdit = hasRole('admin', 'committee');
+  const isAdmin = hasRole('admin');
+  const canEdit = isAdmin;
   const debouncedSearch = useDebouncedValue(search);
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useMembers({
     search: debouncedSearch || undefined,
     status: statusFilter || undefined,
+    sort: sortBy,
     page,
     per_page: perPage,
   });
@@ -47,7 +50,7 @@ export default function MemberList() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, debouncedSearch]);
+  }, [statusFilter, debouncedSearch, sortBy]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -157,6 +160,14 @@ export default function MemberList() {
               <option value="active">在队</option>
               <option value="inactive">离队</option>
             </select>
+            <select
+              className="form-input w-full sm:w-40"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+            >
+              <option value="pinyin">按姓名拼音</option>
+              <option value="birthday">按生日</option>
+            </select>
           </div>
         </div>
       </div>
@@ -212,14 +223,20 @@ export default function MemberList() {
               <tr>
                 <th>姓名</th>
                 <th className="hidden md:table-cell">性别</th>
-                <th>学号</th>
+                {isAdmin && <th>学号</th>}
                 <th>院系</th>
-                <th className="hidden lg:table-cell">班级</th>
+                {isAdmin && <th className="hidden lg:table-cell">班级</th>}
                 <th className="hidden lg:table-cell">手机号</th>
-                <th className="hidden md:table-cell">入队年份</th>
-                <th className="hidden lg:table-cell">梯队</th>
-                <th className="hidden lg:table-cell">职务</th>
-                <th className="hidden xl:table-cell">毕业</th>
+                {isAdmin ? (
+                  <>
+                    <th className="hidden md:table-cell">入队年份</th>
+                    <th className="hidden lg:table-cell">梯队</th>
+                    <th className="hidden lg:table-cell">职务</th>
+                    <th className="hidden xl:table-cell">毕业</th>
+                  </>
+                ) : (
+                  <th className="hidden md:table-cell">生日</th>
+                )}
                 <th>状态</th>
                 {canEdit && <th className="text-right">操作</th>}
               </tr>
@@ -227,13 +244,13 @@ export default function MemberList() {
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={canEdit ? 12 : 11} className="p-6">
+                  <td colSpan={isAdmin ? (canEdit ? 12 : 11) : 7} className="p-6">
                     <TableSkeleton columns={6} rows={5} />
                   </td>
                 </tr>
               ) : members.length === 0 ? (
                 <tr>
-                  <td colSpan={canEdit ? 12 : 11}>
+                  <td colSpan={isAdmin ? (canEdit ? 12 : 11) : 7}>
                     <EmptyState icon={Users} title="暂无队员数据" />
                   </td>
                 </tr>
@@ -242,18 +259,24 @@ export default function MemberList() {
                   <tr key={member.id} className="hover:bg-gray-50">
                     <td className="font-medium whitespace-nowrap">{member.name}</td>
                     <td className="hidden md:table-cell">{member.gender || '-'}</td>
-                    <td>{member.student_id || '-'}</td>
+                    {isAdmin && <td>{member.student_id || '-'}</td>}
                     <td className="max-w-32 truncate" title={member.department || ''}>{member.department || '-'}</td>
-                    <td className="hidden lg:table-cell">{member.class_name || '-'}</td>
+                    {isAdmin && <td className="hidden lg:table-cell">{member.class_name || '-'}</td>}
                     <td className="hidden lg:table-cell">{member.phone || '-'}</td>
-                    <td className="hidden md:table-cell">{member.join_year || '-'}</td>
-                    <td className="hidden lg:table-cell">{member.team_level || '-'}</td>
-                    <td className="hidden lg:table-cell">{member.team_role || '-'}</td>
-                    <td className="hidden xl:table-cell">
-                      {member.graduating_this_semester ? (
-                        <span className="text-orange-600">是</span>
-                      ) : '-'}
-                    </td>
+                    {isAdmin ? (
+                      <>
+                        <td className="hidden md:table-cell">{member.join_year || '-'}</td>
+                        <td className="hidden lg:table-cell">{member.team_level || '-'}</td>
+                        <td className="hidden lg:table-cell">{member.team_role || '-'}</td>
+                        <td className="hidden xl:table-cell">
+                          {member.graduating_this_semester ? (
+                            <span className="text-orange-600">是</span>
+                          ) : '-'}
+                        </td>
+                      </>
+                    ) : (
+                      <td className="hidden md:table-cell">{member.birth_date || '-'}</td>
+                    )}
                     <td>
                       <span
                         className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${

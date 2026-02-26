@@ -102,6 +102,8 @@ export interface Program {
   member_count: number;
   rehearsal_count: number;
   completed_rehearsal_count: number;
+  teacher_ids?: number[];
+  teacher_names?: string[];
   created_at: string;
   updated_at: string;
   members?: ProgramMember[];
@@ -114,9 +116,11 @@ export interface ProgramMember {
   member_id: number;
   member?: Member;
   role?: string;
+  is_leader?: boolean;
   joined_at: string;
   left_at?: string;
   status: 'active' | 'left';
+  change_reason?: string;
 }
 
 // Rehearsal types
@@ -244,6 +248,7 @@ export interface ProgramForm {
   display_color?: string;
   semester_id?: number;
   status?: 'active' | 'completed' | 'cancelled';
+  teacher_ids?: number[];
 }
 
 export interface RehearsalForm {

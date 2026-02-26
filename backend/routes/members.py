@@ -5,7 +5,7 @@ from pypinyin import lazy_pinyin
 
 from database import db
 from models import Member, User, AuditLog
-from auth.decorators import login_required, committee_required
+from auth.decorators import login_required, committee_required, admin_required
 from auth.permissions import Permission, check_permission
 
 
@@ -149,10 +149,11 @@ def _update_member_data(member, data, is_create=False):
 @members_bp.route('', methods=['GET'])
 @login_required
 def list_members():
-    """List all members with optional pagination."""
+    """List all members with optional pagination and sorting."""
     # Filter options
     status = request.args.get('status')
     search = request.args.get('search', '').strip()
+    sort = request.args.get('sort', 'pinyin')  # pinyin (default) or birthday
     page = request.args.get('page', type=int)
     per_page = request.args.get('per_page', 20, type=int)
 
@@ -170,17 +171,23 @@ def list_members():
             )
         )
 
+    brief = g.current_user.role != 'admin'
+    members = query.all()
+
+    if sort == 'birthday':
+        from datetime import date as date_type
+        sorted_members = sorted(members, key=lambda m: m.birth_date or date_type.max)
+    else:
+        sorted_members = _sort_members_by_pinyin(members)
+
     # If page param is provided, return paginated results
     if page is not None:
-        # Get all for pinyin sorting, then paginate in-memory
-        members = query.all()
-        sorted_members = _sort_members_by_pinyin(members)
         total = len(sorted_members)
         start = (page - 1) * per_page
         end = start + per_page
         paged = sorted_members[start:end]
         return jsonify({
-            'items': [m.to_dict() for m in paged],
+            'items': [m.to_dict(brief=brief) for m in paged],
             'total': total,
             'page': page,
             'per_page': per_page,
@@ -188,11 +195,8 @@ def list_members():
         })
 
     # No pagination — return all (backwards compatible)
-    members = query.all()
-    sorted_members = _sort_members_by_pinyin(members)
-
     return jsonify({
-        'members': [m.to_dict() for m in sorted_members]
+        'members': [m.to_dict(brief=brief) for m in sorted_members]
     })
 
 
@@ -201,11 +205,12 @@ def list_members():
 def get_member(member_id):
     """Get member by ID."""
     member = Member.query.get_or_404(member_id)
-    return jsonify({'member': member.to_dict(include_programs=True)})
+    brief = g.current_user.role != 'admin'
+    return jsonify({'member': member.to_dict(include_programs=True, brief=brief)})
 
 
 @members_bp.route('', methods=['POST'])
-@committee_required
+@admin_required
 def create_member():
     """Create a new member (or update if name exists)."""
     data = request.get_json()
@@ -280,7 +285,7 @@ def create_member():
 
 
 @members_bp.route('/<int:member_id>', methods=['PUT'])
-@committee_required
+@admin_required
 def update_member(member_id):
     """Update a member."""
     member = Member.query.get_or_404(member_id)
@@ -381,7 +386,7 @@ def update_member(member_id):
 
 
 @members_bp.route('/<int:member_id>', methods=['DELETE'])
-@committee_required
+@admin_required
 def delete_member(member_id):
     """Delete a member."""
     member = Member.query.get_or_404(member_id)
@@ -406,7 +411,7 @@ def delete_member(member_id):
 
 
 @members_bp.route('/batch', methods=['POST'])
-@committee_required
+@admin_required
 def batch_create_members():
     """Batch create members."""
     data = request.get_json()
@@ -531,7 +536,7 @@ def _parse_int(value):
 
 
 @members_bp.route('/import-csv', methods=['POST'])
-@committee_required
+@admin_required
 def import_members_csv():
     """Import members from CSV file.
 

@@ -187,12 +187,12 @@ export const authApi = {
 
 // Members API
 export const membersApi = {
-  list: async (params?: { status?: string; search?: string }) => {
+  list: async (params?: { status?: string; search?: string; sort?: string }) => {
     const response = await api.get<{ members: Member[] }>('/admin/members', { params });
     return response.data.members;
   },
 
-  listPaginated: async (params: { status?: string; search?: string; page: number; per_page?: number }) => {
+  listPaginated: async (params: { status?: string; search?: string; sort?: string; page: number; per_page?: number }) => {
     const response = await api.get<PaginatedResponse<Member>>('/admin/members', { params });
     return response.data;
   },
@@ -297,19 +297,32 @@ export const programsApi = {
     await api.delete(`/admin/programs/${id}`);
   },
 
-  getMembers: async (programId: number) => {
-    const response = await api.get<{ members: { member: Member; role?: string; is_leader?: boolean }[] }>(
-      `/admin/programs/${programId}/members`
+  getMembers: async (programId: number, params?: { include_left?: boolean }) => {
+    const response = await api.get<{
+      members: { member: Member; role?: string; is_leader?: boolean }[];
+      left_members?: { member: Member; joined_at?: string; left_at?: string; change_reason?: string }[];
+    }>(
+      `/admin/programs/${programId}/members`, { params }
     );
-    return response.data.members;
+    return response.data;
+  },
+
+  setTeachers: async (programId: number, teacherIds: number[]) => {
+    const response = await api.put<{ program: Program }>(
+      `/admin/programs/${programId}/teachers`,
+      { teacher_ids: teacherIds }
+    );
+    return response.data.program;
   },
 
   addMember: async (programId: number, memberId: number, role?: string) => {
     await api.post(`/admin/programs/${programId}/members`, { member_id: memberId, role });
   },
 
-  removeMember: async (programId: number, memberId: number) => {
-    await api.delete(`/admin/programs/${programId}/members/${memberId}`);
+  removeMember: async (programId: number, memberId: number, changeReason?: string) => {
+    await api.delete(`/admin/programs/${programId}/members/${memberId}`, {
+      data: changeReason ? { change_reason: changeReason } : undefined,
+    });
   },
 
   setMemberLeader: async (programId: number, memberId: number, isLeader: boolean) => {

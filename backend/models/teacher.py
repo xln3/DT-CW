@@ -20,6 +20,7 @@ class Teacher(db.Model):
 
     # Relationships
     rehearsals = db.relationship('Rehearsal', back_populates='teacher', lazy='dynamic')
+    program_associations = db.relationship('ProgramTeacher', back_populates='teacher', lazy='select')
 
     STATUS_ACTIVE = 'active'
     STATUS_INACTIVE = 'inactive'

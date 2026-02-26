@@ -14,6 +14,7 @@ export default function RehearsalForm() {
   const [error, setError] = useState('');
   const [programs, setPrograms] = useState<Program[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [programTeacherIds, setProgramTeacherIds] = useState<number[]>([]);
 
   const [form, setForm] = useState<RehearsalFormType>({
     program_id: 0,
@@ -35,6 +36,21 @@ export default function RehearsalForm() {
       fetchRehearsal();
     }
   }, [id]);
+
+  // When program changes, update teacher binding info
+  useEffect(() => {
+    if (form.program_id && programs.length > 0) {
+      const selectedProgram = programs.find((p) => p.id === form.program_id);
+      const boundTeacherIds = selectedProgram?.teacher_ids || [];
+      setProgramTeacherIds(boundTeacherIds);
+      // Auto-select teacher if program has exactly one bound teacher and no teacher is selected yet
+      if (!isEdit && boundTeacherIds.length === 1 && !form.teacher_id) {
+        setForm((prev) => ({ ...prev, teacher_id: boundTeacherIds[0] }));
+      }
+    } else {
+      setProgramTeacherIds([]);
+    }
+  }, [form.program_id, programs]);
 
   const fetchOptions = async () => {
     try {
@@ -185,11 +201,33 @@ export default function RehearsalForm() {
                 onChange={handleChange}
               >
                 <option value="">请选择教师（可选）</option>
-                {teachers.map((teacher) => (
-                  <option key={teacher.id} value={teacher.id}>
-                    {teacher.name} {teacher.specialty && `(${teacher.specialty})`}
-                  </option>
-                ))}
+                {programTeacherIds.length > 0 && (
+                  <>
+                    {teachers
+                      .filter((t) => programTeacherIds.includes(t.id))
+                      .map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {teacher.name} {teacher.specialty && `(${teacher.specialty})`}
+                        </option>
+                      ))}
+                    {teachers.some((t) => !programTeacherIds.includes(t.id)) && (
+                      <option disabled>──────────</option>
+                    )}
+                    {teachers
+                      .filter((t) => !programTeacherIds.includes(t.id))
+                      .map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {teacher.name} {teacher.specialty && `(${teacher.specialty})`}
+                        </option>
+                      ))}
+                  </>
+                )}
+                {programTeacherIds.length === 0 &&
+                  teachers.map((teacher) => (
+                    <option key={teacher.id} value={teacher.id}>
+                      {teacher.name} {teacher.specialty && `(${teacher.specialty})`}
+                    </option>
+                  ))}
               </select>
             </div>
 

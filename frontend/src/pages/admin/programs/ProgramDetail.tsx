@@ -12,6 +12,9 @@ import {
   Star,
   StarOff,
   Download,
+  ClipboardCopy,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { programsApi, membersApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -30,6 +33,13 @@ interface ProgramMemberData {
   role?: string;
 }
 
+interface LeftMemberData {
+  member: Member;
+  joined_at?: string;
+  left_at?: string;
+  change_reason?: string;
+}
+
 interface RehearsalData {
   id: number;
   scheduled_date: string;
@@ -45,11 +55,20 @@ export default function ProgramDetail() {
 
   const [program, setProgram] = useState<Program | null>(null);
   const [programMembers, setProgramMembers] = useState<ProgramMemberData[]>([]);
+  const [leftMembers, setLeftMembers] = useState<LeftMemberData[]>([]);
+  const [showLeftMembers, setShowLeftMembers] = useState(false);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddMember, setShowAddMember] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+
+  // Remove member dialog state
+  const [removeTarget, setRemoveTarget] = useState<{ memberId: number; memberName: string } | null>(null);
+  const [removeReason, setRemoveReason] = useState('');
+
+  // Copy names feedback
+  const [copied, setCopied] = useState(false);
 
   // Attendance matrix data
   const [rehearsals, setRehearsals] = useState<RehearsalData[]>([]);
@@ -67,11 +86,12 @@ export default function ProgramDetail() {
     try {
       const [programData, membersData, matrixData] = await Promise.all([
         programsApi.get(Number(id), { include_members: true, include_rehearsals: true }),
-        programsApi.getMembers(Number(id)),
+        programsApi.getMembers(Number(id), { include_left: true }),
         programsApi.getAttendanceMatrix(Number(id)),
       ]);
       setProgram(programData);
-      setProgramMembers(membersData);
+      setProgramMembers(membersData.members);
+      setLeftMembers(membersData.left_members || []);
       setRehearsals(matrixData.rehearsals);
       setAttendanceMatrix(matrixData.matrix);
     } catch (err: unknown) {
@@ -111,15 +131,38 @@ export default function ProgramDetail() {
     }
   };
 
-  const handleRemoveMember = async (memberId: number) => {
-    if (!confirm('确定要移除该成员吗？')) return;
+  const handleRemoveMember = async () => {
+    if (!removeTarget) return;
 
     try {
-      await programsApi.removeMember(Number(id), memberId);
-      setProgramMembers(programMembers.filter((pm) => pm.member.id !== memberId));
+      await programsApi.removeMember(Number(id), removeTarget.memberId, removeReason.trim() || undefined);
+      setProgramMembers(programMembers.filter((pm) => pm.member.id !== removeTarget.memberId));
+      setRemoveTarget(null);
+      setRemoveReason('');
+      // Refresh to get updated left members list
+      fetchData();
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } } };
       setError(error.response?.data?.error || '移除成员失败');
+    }
+  };
+
+  const handleCopyNames = async () => {
+    const names = programMembers.map((pm) => pm.member.name).join('，');
+    try {
+      await navigator.clipboard.writeText(names);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for non-secure contexts
+      const textarea = document.createElement('textarea');
+      textarea.value = names;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -232,6 +275,9 @@ export default function ProgramDetail() {
             </div>
             <p className="mt-1 text-sm text-gray-500">
               {getCategoryLabel(program.category)}
+              {program.teacher_names && program.teacher_names.length > 0 && (
+                <span className="ml-2">· 教师: {program.teacher_names.join('、')}</span>
+              )}
             </p>
           </div>
         </div>
@@ -309,6 +355,16 @@ export default function ProgramDetail() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <h3 className="text-lg font-medium text-gray-900">成员考勤</h3>
             <div className="flex items-center space-x-2">
+              {programMembers.length > 0 && (
+                <button
+                  onClick={handleCopyNames}
+                  className="btn-secondary"
+                  title="复制成员名单到剪贴板"
+                >
+                  <ClipboardCopy className="w-4 h-4 mr-2" />
+                  {copied ? '已复制' : '复制名单'}
+                </button>
+              )}
               {rehearsals.length > 0 && programMembers.length > 0 && (
                 <button
                   onClick={() =>
@@ -426,7 +482,7 @@ export default function ProgramDetail() {
                               )}
                             </button>
                             <button
-                              onClick={() => handleRemoveMember(member.id)}
+                              onClick={() => setRemoveTarget({ memberId: member.id, memberName: member.name })}
                               className="text-red-600 hover:text-red-800"
                             >
                               移除
@@ -446,6 +502,91 @@ export default function ProgramDetail() {
           )}
         </div>
       </div>
+
+      {/* Left Members Section */}
+      {leftMembers.length > 0 && (
+        <div className="card">
+          <div className="card-body">
+            <button
+              onClick={() => setShowLeftMembers(!showLeftMembers)}
+              className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
+            >
+              {showLeftMembers ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+              <span className="text-sm font-medium">已离队成员 ({leftMembers.length})</span>
+            </button>
+            {showLeftMembers && (
+              <div className="mt-3 overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">姓名</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">加入时间</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">离开时间</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">原因</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {leftMembers.map((lm) => (
+                      <tr key={lm.member.id} className="text-sm text-gray-600">
+                        <td className="px-4 py-2">{lm.member.name}</td>
+                        <td className="px-4 py-2">{lm.joined_at ? new Date(lm.joined_at).toLocaleDateString('zh-CN') : '-'}</td>
+                        <td className="px-4 py-2">{lm.left_at ? new Date(lm.left_at).toLocaleDateString('zh-CN') : '-'}</td>
+                        <td className="px-4 py-2">{lm.change_reason || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Remove Member Dialog */}
+      {removeTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4">
+            <div className="px-6 py-4 border-b">
+              <h3 className="text-lg font-medium text-gray-900">移除成员</h3>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <p className="text-sm text-gray-600">
+                确定要将 <span className="font-medium">{removeTarget.memberName}</span> 从节目中移除吗？
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">原因（可选）</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="例如: 个人原因退出"
+                  value={removeReason}
+                  onChange={(e) => setRemoveReason(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-gray-50 border-t flex justify-end space-x-3">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => { setRemoveTarget(null); setRemoveReason(''); }}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium"
+                onClick={handleRemoveMember}
+              >
+                确认移除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Member Modal */}
       {showAddMember && (

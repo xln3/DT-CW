@@ -6,14 +6,14 @@ interface AttendanceBarProps {
 
 /**
  * Attendance bar showing proportional segments for normal/partial/absent
- * Used in overview matrix to show attendance distribution for each rehearsal
+ * with count numbers displayed on segments wide enough to show them.
  */
 export default function AttendanceBar({ cell }: AttendanceBarProps) {
   const { normal, partial, absent, total, counts } = cell;
 
   if (total === 0) {
     return (
-      <div className="w-full h-4 bg-gray-200 rounded" title="无考勤数据" />
+      <div className="w-full h-6 bg-gray-200 rounded" title="无考勤数据" />
     );
   }
 
@@ -24,28 +24,42 @@ export default function AttendanceBar({ cell }: AttendanceBarProps) {
 
   const tooltip = `正常: ${normal}, 迟到/早退: ${partial}, 缺勤: ${absent} (共${total}人)`;
 
+  const showLabel = (pct: number) => pct >= 20;
+
   return (
     <div
-      className={`w-full h-4 flex rounded overflow-hidden ${!counts ? 'opacity-50' : ''}`}
+      className={`w-full h-6 flex rounded overflow-hidden ${!counts ? 'opacity-50' : ''}`}
       title={counts ? tooltip : `${tooltip} (不计入考勤)`}
     >
       {normalPct > 0 && (
         <div
-          className="bg-green-500 h-full"
+          className="bg-green-500 h-full flex items-center justify-center"
           style={{ width: `${normalPct}%` }}
-        />
+        >
+          {showLabel(normalPct) && (
+            <span className="text-[10px] font-medium text-white drop-shadow-sm">{normal}</span>
+          )}
+        </div>
       )}
       {partialPct > 0 && (
         <div
-          className="bg-yellow-500 h-full"
+          className="bg-yellow-500 h-full flex items-center justify-center"
           style={{ width: `${partialPct}%` }}
-        />
+        >
+          {showLabel(partialPct) && (
+            <span className="text-[10px] font-medium text-white drop-shadow-sm">{partial}</span>
+          )}
+        </div>
       )}
       {absentPct > 0 && (
         <div
-          className="bg-gray-400 h-full"
+          className="bg-gray-400 h-full flex items-center justify-center"
           style={{ width: `${absentPct}%` }}
-        />
+        >
+          {showLabel(absentPct) && (
+            <span className="text-[10px] font-medium text-white drop-shadow-sm">{absent}</span>
+          )}
+        </div>
       )}
     </div>
   );

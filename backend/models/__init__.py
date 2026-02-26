@@ -5,7 +5,7 @@ from .system_config import SystemConfig
 from .audit_log import AuditLog
 from .member import Member
 from .teacher import Teacher
-from .program import Program, ProgramMember
+from .program import Program, ProgramMember, ProgramTeacher
 from .rehearsal import Rehearsal
 from .attendance import Attendance
 from .face_vector import FaceVector
@@ -40,7 +40,7 @@ __all__ = [
     'AuditLog',
     'Member',
     'Teacher',
-    'Program', 'ProgramMember',
+    'Program', 'ProgramMember', 'ProgramTeacher',
     'Rehearsal',
     'Attendance',
     'FaceVector',
