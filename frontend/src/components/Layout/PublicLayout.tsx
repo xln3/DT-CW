@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Calendar, Users, LogIn } from 'lucide-react';
 
-const SITE_TITLE = 'THUDT 2026寒训';
+const SITE_TITLE = 'THUDT 2026春季训练';
 
 interface PublicLayoutProps {
   children: ReactNode;

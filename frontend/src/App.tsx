@@ -17,7 +17,7 @@ import { ProgramList, ProgramForm, ProgramDetail } from './pages/admin/programs'
 import { RehearsalForm, RehearsalDetail } from './pages/admin/rehearsals';
 import RehearsalHall from './pages/admin/RehearsalHall';
 import { CalendarList } from './pages/admin/calendar';
-import { VenueList, VenueForm } from './pages/admin/venues';
+import { VenueForm } from './pages/admin/venues';
 import { BudgetList } from './pages/admin/budget';
 import { SemesterList, UserList, SettingsHub, Profile } from './pages/admin/settings';
 import { AttendanceOverview, ProgramAttendance, AttendanceSearch } from './pages/public';
