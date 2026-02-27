@@ -412,7 +412,37 @@ export default function ProgramDetail() {
 
           {programMembers.length === 0 ? (
             <p className="text-center text-gray-500 py-8">暂无成员</p>
+          ) : rehearsals.length === 0 ? (
+            /* Compact chip layout when no rehearsals */
+            <div className="flex flex-wrap gap-2">
+              {programMembers.map(({ member, is_leader }) => (
+                <div
+                  key={member.id}
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-gray-100 rounded-full text-sm"
+                >
+                  {is_leader && (
+                    <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                  )}
+                  <Link
+                    to={`/admin/members/${member.id}/edit`}
+                    className="text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    {member.name}
+                  </Link>
+                  {canEdit && (
+                    <button
+                      onClick={() => setRemoveTarget({ memberId: member.id, memberName: member.name })}
+                      className="text-gray-400 hover:text-red-600 ml-0.5"
+                      title="移除"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           ) : (
+            /* Full attendance matrix table */
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -495,10 +525,6 @@ export default function ProgramDetail() {
                 </tbody>
               </table>
             </div>
-          )}
-
-          {rehearsals.length === 0 && programMembers.length > 0 && (
-            <p className="text-center text-gray-500 py-4 text-sm">暂无已完成的排练</p>
           )}
         </div>
       </div>

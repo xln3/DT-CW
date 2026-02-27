@@ -175,11 +175,7 @@ export default function UserList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">用户管理</h1>
-          <p className="mt-1 text-sm text-gray-500">管理系统用户账号</p>
-        </div>
+      <div className="flex justify-end">
         <button onClick={() => handleOpenForm()} className="btn-primary">
           <Plus className="w-4 h-4 mr-2" />
           新建用户
