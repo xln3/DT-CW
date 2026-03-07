@@ -22,9 +22,7 @@ export default function AttendanceBar({ cell }: AttendanceBarProps) {
   const partialPct = (partial / total) * 100;
   const absentPct = (absent / total) * 100;
 
-  const tooltip = `正常: ${normal}, 迟到/早退: ${partial}, 缺勤: ${absent} (共${total}人)`;
-
-  const showLabel = (pct: number) => pct >= 20;
+  const tooltip = `正常: ${normal}, 迟到/早退: ${partial}, 缺勤/请假: ${absent} (共${total}人)`;
 
   return (
     <div
@@ -33,32 +31,22 @@ export default function AttendanceBar({ cell }: AttendanceBarProps) {
     >
       {normalPct > 0 && (
         <div
-          className="bg-green-500 h-full flex items-center justify-center"
+          className="bg-green-500 h-full"
           style={{ width: `${normalPct}%` }}
-        >
-          {showLabel(normalPct) && (
-            <span className="text-[10px] font-medium text-white drop-shadow-sm">{normal}</span>
-          )}
-        </div>
+        />
       )}
       {partialPct > 0 && (
         <div
-          className="bg-yellow-500 h-full flex items-center justify-center"
+          className="bg-yellow-500 h-full"
           style={{ width: `${partialPct}%` }}
-        >
-          {showLabel(partialPct) && (
-            <span className="text-[10px] font-medium text-white drop-shadow-sm">{partial}</span>
-          )}
-        </div>
+        />
       )}
       {absentPct > 0 && (
         <div
           className="bg-gray-400 h-full flex items-center justify-center"
           style={{ width: `${absentPct}%` }}
         >
-          {showLabel(absentPct) && (
-            <span className="text-[10px] font-medium text-white drop-shadow-sm">{absent}</span>
-          )}
+          <span className="text-[10px] font-medium text-white drop-shadow-sm">{absent}</span>
         </div>
       )}
     </div>

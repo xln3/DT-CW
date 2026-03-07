@@ -252,10 +252,10 @@ def attendance_overview_matrix():
 
     for program in programs:
         all_rehearsals = program.rehearsals.all()
-        completed_rehearsals = [r for r in all_rehearsals
-                               if r.status != 'cancelled' and is_rehearsal_completed(r)]
-        program_rehearsals[program.id] = completed_rehearsals
-        for r in completed_rehearsals:
+        counted_rehearsals = [r for r in all_rehearsals
+                              if r.status != 'cancelled' and counts_for_attendance(r)]
+        program_rehearsals[program.id] = counted_rehearsals
+        for r in counted_rehearsals:
             all_dates.add(r.scheduled_date.isoformat())
 
     # Sort dates chronologically
@@ -280,9 +280,6 @@ def attendance_overview_matrix():
             records = rehearsal.attendance_records.all()
             total = len(records)
 
-            counts = rehearsal.counts_towards_attendance
-            counts_towards = counts if counts is not None else True
-
             # Count by status
             normal_count = 0
             partial_count = 0  # late, early_leave, leave_late, leave_early
@@ -299,7 +296,7 @@ def attendance_overview_matrix():
 
             matrix[program.id][date_str] = {
                 'rehearsal_id': rehearsal.id,
-                'counts': counts_towards,
+                'counts': True,
                 'total': total,
                 'normal': normal_count,
                 'partial': partial_count,
@@ -385,7 +382,8 @@ def program_attendance_matrix(program_id):
                     'status': record.status,
                     'detected_before': record.detected_before,
                     'detected_after': record.detected_after,
-                    'has_leave': record.has_leave
+                    'has_leave': record.has_leave,
+                    'leave_type': record.leave_type,
                 }
             else:
                 matrix[member_id][rehearsal.id] = None

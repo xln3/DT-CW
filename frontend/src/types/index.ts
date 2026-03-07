@@ -698,6 +698,7 @@ export interface ProgramMatrixCell {
   detected_before: boolean;
   detected_after: boolean;
   has_leave: boolean;
+  leave_type?: string | null;
 }
 
 export interface ProgramMatrixSummary {

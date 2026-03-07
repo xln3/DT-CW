@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Search, User } from 'lucide-react';
 import { publicApi } from '../../services/api';
-import { PROGRAM_CATEGORIES } from '../../types';
 import type { OverviewMatrixData } from '../../types';
 import AttendanceBar from './components/AttendanceBar';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -87,11 +86,6 @@ export default function AttendanceOverview() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const getCategoryLabel = (category: string) => {
-    const cat = PROGRAM_CATEGORIES.find((c) => c.value === category);
-    return cat?.label || category || '其他';
   };
 
   const formatDate = (dateStr: string) => {
@@ -328,7 +322,6 @@ export default function AttendanceOverview() {
                             className="block hover:text-primary-600"
                           >
                             <div className="font-medium text-gray-900">{program.name}</div>
-                            <div className="text-xs text-gray-500">{getCategoryLabel(program.category)}</div>
                           </Link>
                         </td>
                         {data.dates.map((date) => {
