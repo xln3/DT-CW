@@ -9,7 +9,7 @@ export const memberKeys = {
   detail: (id: number) => [...memberKeys.details(), id] as const,
 };
 
-export function useMembers(params: { status?: string; search?: string; sort?: string; page: number; per_page?: number }) {
+export function useMembers(params: { status?: string; search?: string; sort?: string; graduating?: string; page: number; per_page?: number }) {
   return useQuery({
     queryKey: memberKeys.list(params),
     queryFn: () => membersApi.listPaginated(params),

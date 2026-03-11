@@ -187,12 +187,12 @@ export const authApi = {
 
 // Members API
 export const membersApi = {
-  list: async (params?: { status?: string; search?: string; sort?: string }) => {
+  list: async (params?: { status?: string; search?: string; sort?: string; graduating?: string }) => {
     const response = await api.get<{ members: Member[] }>('/admin/members', { params });
     return response.data.members;
   },
 
-  listPaginated: async (params: { status?: string; search?: string; sort?: string; page: number; per_page?: number }) => {
+  listPaginated: async (params: { status?: string; search?: string; sort?: string; graduating?: string; page: number; per_page?: number }) => {
     const response = await api.get<PaginatedResponse<Member>>('/admin/members', { params });
     return response.data;
   },

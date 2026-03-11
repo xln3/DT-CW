@@ -153,7 +153,8 @@ def list_members():
     # Filter options
     status = request.args.get('status')
     search = request.args.get('search', '').strip()
-    sort = request.args.get('sort', 'pinyin')  # pinyin (default) or birthday
+    sort = request.args.get('sort', 'pinyin')  # pinyin, birthday, join_year
+    graduating = request.args.get('graduating')  # '1' to filter graduating members
     page = request.args.get('page', type=int)
     per_page = request.args.get('per_page', 20, type=int)
 
@@ -161,6 +162,9 @@ def list_members():
 
     if status:
         query = query.filter_by(status=status)
+
+    if graduating == '1':
+        query = query.filter_by(graduating_this_semester=True)
 
     if search:
         query = query.filter(
@@ -175,8 +179,16 @@ def list_members():
     members = query.all()
 
     if sort == 'birthday':
-        from datetime import date as date_type
-        sorted_members = sorted(members, key=lambda m: m.birth_date or date_type.max)
+        # Sort by month-day (Jan 1 → Dec 31), ignoring year
+        sorted_members = sorted(
+            members,
+            key=lambda m: (m.birth_date.month, m.birth_date.day) if m.birth_date else (13, 0),
+        )
+    elif sort == 'join_year':
+        sorted_members = sorted(
+            members,
+            key=lambda m: (m.join_year or 9999, ''.join(lazy_pinyin(m.name or ''))),
+        )
     else:
         sorted_members = _sort_members_by_pinyin(members)
 

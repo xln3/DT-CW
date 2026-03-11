@@ -10,9 +10,18 @@ import { useMembers, useDeleteMember, memberKeys } from '../../../hooks';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useQueryClient } from '@tanstack/react-query';
 
+function formatBirthday(dateStr: string): string {
+  const parts = dateStr.split('-');
+  if (parts.length < 3) return dateStr;
+  const month = parseInt(parts[1], 10);
+  const day = parseInt(parts[2], 10);
+  return `${month}月${day}日`;
+}
+
 export default function MemberList() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [graduatingFilter, setGraduatingFilter] = useState('');
   const [sortBy, setSortBy] = useState('pinyin');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [page, setPage] = useState(1);
@@ -37,6 +46,7 @@ export default function MemberList() {
   const { data, isLoading, error } = useMembers({
     search: debouncedSearch || undefined,
     status: statusFilter || undefined,
+    graduating: graduatingFilter || undefined,
     sort: sortBy,
     page,
     per_page: perPage,
@@ -66,19 +76,18 @@ export default function MemberList() {
   const visibleColCount = useMemo(() => {
     let count = 2; // name + status (always visible)
     count += 1; // department (always visible)
+    // Columns visible to all users
+    if (colVisibility.birth_date) count++;
+    if (colVisibility.join_year) count++;
+    if (colVisibility.team_role) count++;
+    if (colVisibility.graduating) count++;
+    // Admin-only columns
     if (isAdmin) {
       if (colVisibility.student_id) count++;
       if (colVisibility.gender) count++;
       if (colVisibility.class_name) count++;
       if (colVisibility.phone) count++;
-      if (colVisibility.join_year) count++;
       if (colVisibility.team_level) count++;
-      if (colVisibility.team_role) count++;
-      if (colVisibility.graduating) count++;
-    } else {
-      if (colVisibility.gender) count++;
-      if (colVisibility.phone) count++;
-      if (colVisibility.birth_date) count++;
     }
     if (canEdit) count++;
     return count;
@@ -87,7 +96,7 @@ export default function MemberList() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, debouncedSearch, sortBy]);
+  }, [statusFilter, graduatingFilter, debouncedSearch, sortBy]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -189,7 +198,7 @@ export default function MemberList() {
               </div>
             </div>
             <select
-              className="form-input w-full sm:w-40"
+              className="form-input w-full sm:w-32"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -198,12 +207,21 @@ export default function MemberList() {
               <option value="inactive">离队</option>
             </select>
             <select
-              className="form-input w-full sm:w-40"
+              className="form-input w-full sm:w-32"
+              value={graduatingFilter}
+              onChange={(e) => setGraduatingFilter(e.target.value)}
+            >
+              <option value="">全部队员</option>
+              <option value="1">本学期毕业</option>
+            </select>
+            <select
+              className="form-input w-full sm:w-36"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
             >
               <option value="pinyin">按姓名拼音</option>
-              <option value="birthday">按生日</option>
+              <option value="birthday">按生日(月日)</option>
+              <option value="join_year">按入队年份</option>
             </select>
           </div>
         </div>
@@ -259,21 +277,16 @@ export default function MemberList() {
             <thead>
               <tr>
                 <th>姓名</th>
-                {colVisibility.gender && <th className="hidden md:table-cell">性别</th>}
-                {isAdmin && colVisibility.student_id && <th>学号</th>}
+                {isAdmin && colVisibility.gender && <th className="hidden md:table-cell">性别</th>}
+                {isAdmin && colVisibility.student_id && <th className="hidden lg:table-cell">学号</th>}
                 <th>院系</th>
-                {isAdmin && colVisibility.class_name && <th className="hidden lg:table-cell">班级</th>}
-                {colVisibility.phone && <th className="hidden lg:table-cell">手机号</th>}
-                {isAdmin ? (
-                  <>
-                    {colVisibility.join_year && <th className="hidden md:table-cell">入队年份</th>}
-                    {colVisibility.team_level && <th className="hidden lg:table-cell">梯队</th>}
-                    {colVisibility.team_role && <th className="hidden lg:table-cell">职务</th>}
-                    {colVisibility.graduating && <th className="hidden xl:table-cell">毕业</th>}
-                  </>
-                ) : (
-                  colVisibility.birth_date && <th className="hidden md:table-cell">生日</th>
-                )}
+                {isAdmin && colVisibility.class_name && <th className="hidden xl:table-cell">班级</th>}
+                {isAdmin && colVisibility.phone && <th className="hidden xl:table-cell">手机号</th>}
+                {colVisibility.birth_date && <th className="hidden md:table-cell">生日</th>}
+                {colVisibility.join_year && <th className="hidden md:table-cell">入队</th>}
+                {colVisibility.team_role && <th className="hidden lg:table-cell">职务</th>}
+                {isAdmin && colVisibility.team_level && <th className="hidden xl:table-cell">梯队</th>}
+                {colVisibility.graduating && <th className="hidden lg:table-cell">毕业</th>}
                 <th>状态</th>
                 {canEdit && <th className="text-right">操作</th>}
               </tr>
@@ -295,26 +308,29 @@ export default function MemberList() {
                 members.map((member) => (
                   <tr key={member.id} className="hover:bg-gray-50">
                     <td className="font-medium whitespace-nowrap">{member.name}</td>
-                    {colVisibility.gender && <td className="hidden md:table-cell">{member.gender || '-'}</td>}
-                    {isAdmin && colVisibility.student_id && <td>{member.student_id || '-'}</td>}
+                    {isAdmin && colVisibility.gender && <td className="hidden md:table-cell">{member.gender || '-'}</td>}
+                    {isAdmin && colVisibility.student_id && <td className="hidden lg:table-cell">{member.student_id || '-'}</td>}
                     <td className="max-w-32 truncate" title={member.department || ''}>{member.department || '-'}</td>
-                    {isAdmin && colVisibility.class_name && <td className="hidden lg:table-cell">{member.class_name || '-'}</td>}
-                    {colVisibility.phone && <td className="hidden lg:table-cell">{member.phone || '-'}</td>}
-                    {isAdmin ? (
-                      <>
-                        {colVisibility.join_year && <td className="hidden md:table-cell">{member.join_year || '-'}</td>}
-                        {colVisibility.team_level && <td className="hidden lg:table-cell">{member.team_level || '-'}</td>}
-                        {colVisibility.team_role && <td className="hidden lg:table-cell">{member.team_role || '-'}</td>}
-                        {colVisibility.graduating && (
-                          <td className="hidden xl:table-cell">
-                            {member.graduating_this_semester ? (
-                              <span className="text-orange-600">是</span>
-                            ) : '-'}
-                          </td>
-                        )}
-                      </>
-                    ) : (
-                      colVisibility.birth_date && <td className="hidden md:table-cell">{member.birth_date || '-'}</td>
+                    {isAdmin && colVisibility.class_name && <td className="hidden xl:table-cell">{member.class_name || '-'}</td>}
+                    {isAdmin && colVisibility.phone && <td className="hidden xl:table-cell">{member.phone || '-'}</td>}
+                    {colVisibility.birth_date && (
+                      <td className="hidden md:table-cell whitespace-nowrap">
+                        {member.birth_date ? formatBirthday(member.birth_date) : '-'}
+                      </td>
+                    )}
+                    {colVisibility.join_year && <td className="hidden md:table-cell">{member.join_year || '-'}</td>}
+                    {colVisibility.team_role && (
+                      <td className="hidden lg:table-cell max-w-24 truncate" title={member.team_role || ''}>
+                        {member.team_role && member.team_role !== '无' ? member.team_role : '-'}
+                      </td>
+                    )}
+                    {isAdmin && colVisibility.team_level && <td className="hidden xl:table-cell">{member.team_level || '-'}</td>}
+                    {colVisibility.graduating && (
+                      <td className="hidden lg:table-cell">
+                        {member.graduating_this_semester ? (
+                          <span className="text-orange-600 font-medium">是</span>
+                        ) : '-'}
+                      </td>
                     )}
                     <td>
                       <span

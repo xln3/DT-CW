@@ -61,6 +61,9 @@ class Member(db.Model):
                 'department': self.department,
                 'phone': self.phone,
                 'birth_date': self.birth_date.isoformat() if self.birth_date else None,
+                'join_year': self.join_year,
+                'team_role': self.team_role,
+                'graduating_this_semester': self.graduating_this_semester,
                 'status': self.status,
             }
         data = {
