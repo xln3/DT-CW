@@ -306,7 +306,8 @@ def attendance_overview_matrix():
     return jsonify({
         'semester': {
             'id': semester.id,
-            'name': semester.name
+            'name': semester.name,
+            'start_date': semester.start_date.isoformat(),
         } if semester else None,
         'programs': program_list,
         'dates': sorted_dates,

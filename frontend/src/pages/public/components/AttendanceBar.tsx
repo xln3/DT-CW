@@ -31,15 +31,19 @@ export default function AttendanceBar({ cell }: AttendanceBarProps) {
     >
       {normalPct > 0 && (
         <div
-          className="bg-green-500 h-full"
+          className="bg-green-500 h-full flex items-center justify-center overflow-hidden"
           style={{ width: `${normalPct}%` }}
-        />
+        >
+          <span className="text-[10px] font-medium text-white drop-shadow-sm">{normal}</span>
+        </div>
       )}
       {partialPct > 0 && (
         <div
-          className="bg-yellow-500 h-full"
+          className="bg-yellow-500 h-full flex items-center justify-center overflow-hidden"
           style={{ width: `${partialPct}%` }}
-        />
+        >
+          <span className="text-[10px] font-medium text-white drop-shadow-sm">{partial}</span>
+        </div>
       )}
       {absentPct > 0 && (
         <div

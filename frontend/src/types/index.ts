@@ -675,7 +675,7 @@ export interface OverviewMatrixCell {
 }
 
 export interface OverviewMatrixData {
-  semester: { id: number; name: string } | null;
+  semester: { id: number; name: string; start_date: string } | null;
   programs: OverviewMatrixProgram[];
   dates: string[];
   matrix: Record<number, Record<string, OverviewMatrixCell>>;

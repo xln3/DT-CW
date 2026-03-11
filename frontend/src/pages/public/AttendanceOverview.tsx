@@ -1,10 +1,59 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Search, User } from 'lucide-react';
 import { publicApi } from '../../services/api';
-import type { OverviewMatrixData } from '../../types';
+import type { OverviewMatrixData, OverviewMatrixCell } from '../../types';
 import AttendanceBar from './components/AttendanceBar';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+
+interface WeekGroup {
+  weekNum: number;
+  label: string;
+  dates: string[];
+}
+
+/** Group dates by calendar week relative to semester start. */
+function groupDatesByWeek(dates: string[], semesterStartDate: string): WeekGroup[] {
+  const start = new Date(semesterStartDate + 'T00:00:00');
+  const startDay = start.getDay(); // 0=Sun
+  const mondayOffset = startDay === 0 ? -6 : 1 - startDay;
+  const startMonday = new Date(start);
+  startMonday.setDate(start.getDate() + mondayOffset);
+
+  const weekMap = new Map<number, string[]>();
+  for (const dateStr of dates) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const diffDays = Math.round((d.getTime() - startMonday.getTime()) / 86400000);
+    const weekNum = Math.floor(diffDays / 7) + 1;
+    if (!weekMap.has(weekNum)) weekMap.set(weekNum, []);
+    weekMap.get(weekNum)!.push(dateStr);
+  }
+
+  return Array.from(weekMap.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([weekNum, weekDates]) => ({
+      weekNum,
+      label: `W${weekNum}`,
+      dates: weekDates.sort(),
+    }));
+}
+
+/** Determine which day of the week a program rehearses (周六 or 周日). */
+function getProgramDayLabel(
+  programId: number,
+  matrix: Record<number, Record<string, OverviewMatrixCell>>,
+  dates: string[],
+): string {
+  const programData = matrix[programId];
+  if (!programData) return '';
+  for (const dateStr of dates) {
+    if (programData[dateStr]) {
+      const day = new Date(dateStr + 'T00:00:00').getDay();
+      return day === 6 ? '周六' : '周日';
+    }
+  }
+  return '';
+}
 
 interface MemberResult {
   member: {
@@ -88,10 +137,10 @@ export default function AttendanceOverview() {
     }
   };
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
-  };
+  const weekGroups = useMemo(() => {
+    if (!data?.dates.length || !data.semester?.start_date) return [];
+    return groupDatesByWeek(data.dates, data.semester.start_date);
+  }, [data]);
 
   const getAttendanceColor = (rate: number) => {
     if (rate >= 90) return 'text-green-600';
@@ -302,44 +351,52 @@ export default function AttendanceOverview() {
                       >
                         节目
                       </th>
-                      {data.dates.map((date) => (
+                      {weekGroups.map((wg) => (
                         <th
-                          key={date}
+                          key={wg.label}
                           className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
                           style={{ minWidth: '60px' }}
                         >
-                          {formatDate(date)}
+                          {wg.label}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {data.programs.map((program) => (
-                      <tr key={program.id} className="hover:bg-gray-50">
-                        <td className="sticky left-0 z-10 bg-white px-4 py-3 border-r border-gray-200">
-                          <Link
-                            to={`/attendance/programs/${program.id}`}
-                            className="block hover:text-primary-600"
-                          >
-                            <div className="font-medium text-gray-900">{program.name}</div>
-                          </Link>
-                        </td>
-                        {data.dates.map((date) => {
-                          const cell = data.matrix[program.id]?.[date];
-                          return (
-                            <td key={date} className="px-2 py-3">
-                              {cell ? (
-                                <AttendanceBar cell={cell} />
-                              ) : (
-                                <div className="w-full h-4 flex items-center justify-center">
-                                  <span className="text-gray-300">-</span>
-                                </div>
+                    {data.programs.map((program) => {
+                      const dayLabel = getProgramDayLabel(program.id, data.matrix, data.dates);
+                      return (
+                        <tr key={program.id} className="hover:bg-gray-50">
+                          <td className="sticky left-0 z-10 bg-white px-4 py-3 border-r border-gray-200">
+                            <Link
+                              to={`/attendance/programs/${program.id}`}
+                              className="block hover:text-primary-600"
+                            >
+                              <span className="font-medium text-gray-900">{program.name}</span>
+                              {dayLabel && (
+                                <span className="ml-1 text-xs text-gray-400">({dayLabel})</span>
                               )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                            </Link>
+                          </td>
+                          {weekGroups.map((wg) => {
+                            const cell = wg.dates
+                              .map((d) => data.matrix[program.id]?.[d])
+                              .find((c): c is NonNullable<typeof c> => c != null);
+                            return (
+                              <td key={wg.label} className="px-2 py-3">
+                                {cell ? (
+                                  <AttendanceBar cell={cell} />
+                                ) : (
+                                  <div className="w-full h-4 flex items-center justify-center">
+                                    <span className="text-gray-300">-</span>
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
