@@ -9,6 +9,7 @@ __pycache__/
 *.egg
 .pytest_cache/
 *.db
+*.db.bak.*
 
 # Node
 node_modules/
@@ -63,3 +64,6 @@ htmlcov/
 # Temporary files
 *.tmp
 *.temp
+
+# Gunicorn
+*.ctl
