@@ -48,15 +48,13 @@ def attendance_overview():
         num_counted = len(counted_rehearsals)
         total_rehearsals += num_counted  # Only count those marked for attendance
 
-        # Get member count
-        member_count = ProgramMember.query.filter_by(
-            program_id=program.id,
-            status='active'
-        ).count()
+        # Get current active member IDs — used to filter out left members from all stats
+        active_pms = ProgramMember.query.filter_by(program_id=program.id, status='active').all()
+        active_member_ids = {pm.member_id for pm in active_pms}
+        member_count = len(active_member_ids)
 
         # Add to total members
-        for pm in ProgramMember.query.filter_by(program_id=program.id, status='active'):
-            total_members.add(pm.member_id)
+        total_members.update(active_member_ids)
 
         if num_counted == 0:
             program_list.append({
@@ -71,12 +69,15 @@ def attendance_overview():
             })
             continue
 
-        # Calculate attendance rate (only from rehearsals marked to count)
+        # Calculate attendance rate — only count currently active members' records.
+        # Members who have since left the program are excluded.
         total_records = 0
         present_count = 0
 
         for rehearsal in counted_rehearsals:
             for record in rehearsal.attendance_records:
+                if record.member_id not in active_member_ids:
+                    continue
                 total_records += 1
                 if record.status in ATTENDED_STATUSES:
                     present_count += 1
@@ -180,10 +181,17 @@ def program_attendance(program_id):
 
         member_list.append(stats)
 
+    # Precompute active member IDs for rehearsal-level rate calculation
+    active_pm_ids = {
+        pm.member_id for pm in ProgramMember.query.filter_by(
+            program_id=program.id, status='active'
+        ).all()
+    }
+
     # Build rehearsal list (only completed ones, show status and whether it counts)
     rehearsal_list = []
     for rehearsal in completed_rehearsals[:20]:  # Last 20 completed rehearsals
-        records = rehearsal.attendance_records.all()
+        records = [r for r in rehearsal.attendance_records if r.member_id in active_pm_ids]
         total = len(records)
         present = sum(1 for r in records if r.status in ATTENDED_STATUSES)
 
@@ -272,20 +280,29 @@ def attendance_overview_matrix():
             'category': program.category or ''
         })
 
+        # Only count currently active members — exclude anyone who has left the program
+        active_ids = {
+            pm.member_id for pm in ProgramMember.query.filter_by(
+                program_id=program.id, status='active'
+            ).all()
+        }
+
         matrix[program.id] = {}
         rehearsals = program_rehearsals.get(program.id, [])
 
         for rehearsal in rehearsals:
             date_str = rehearsal.scheduled_date.isoformat()
-            records = rehearsal.attendance_records.all()
-            total = len(records)
 
-            # Count by status
+            # Count by status, filtered to currently active members only
+            total = 0
             normal_count = 0
             partial_count = 0  # late, early_leave, leave_late, leave_early
             absent_count = 0   # absent, leave_absent
 
-            for r in records:
+            for r in rehearsal.attendance_records:
+                if r.member_id not in active_ids:
+                    continue
+                total += 1
                 if r.status == Attendance.STATUS_NORMAL:
                     normal_count += 1
                 elif r.status in [Attendance.STATUS_LATE, Attendance.STATUS_EARLY_LEAVE,
