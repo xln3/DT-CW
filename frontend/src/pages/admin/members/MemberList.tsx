@@ -25,7 +25,7 @@ export default function MemberList() {
   const [sortBy, setSortBy] = useState('pinyin');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [page, setPage] = useState(1);
-  const perPage = 20;
+  const [perPage, setPerPage] = useState(50);
 
   // Import state
   const [isImporting, setIsImporting] = useState(false);
@@ -93,10 +93,10 @@ export default function MemberList() {
     return count;
   }, [isAdmin, canEdit, colVisibility]);
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when debounced search changes
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, graduatingFilter, debouncedSearch, sortBy]);
+  }, [debouncedSearch]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -200,7 +200,7 @@ export default function MemberList() {
             <select
               className="form-input w-full sm:w-32"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
             >
               <option value="">全部状态</option>
               <option value="active">在队</option>
@@ -209,7 +209,7 @@ export default function MemberList() {
             <select
               className="form-input w-full sm:w-32"
               value={graduatingFilter}
-              onChange={(e) => setGraduatingFilter(e.target.value)}
+              onChange={(e) => { setGraduatingFilter(e.target.value); setPage(1); }}
             >
               <option value="">全部队员</option>
               <option value="1">本学期毕业</option>
@@ -217,11 +217,20 @@ export default function MemberList() {
             <select
               className="form-input w-full sm:w-36"
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
+              onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
             >
               <option value="pinyin">按姓名拼音</option>
               <option value="birthday">按生日(月日)</option>
               <option value="join_year">按入队年份</option>
+            </select>
+            <select
+              className="form-input w-full sm:w-28"
+              value={perPage}
+              onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
+            >
+              <option value={50}>50条/页</option>
+              <option value={100}>100条/页</option>
+              <option value={999}>全部</option>
             </select>
           </div>
         </div>
@@ -389,7 +398,7 @@ export default function MemberList() {
       </div>
 
       {/* Pagination */}
-      {!isLoading && (
+      {!isLoading && pages > 1 && (
         <Pagination
           page={page}
           pages={pages}
