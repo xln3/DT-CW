@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Edit2, AlertCircle, FileText } from 'lucide-react';
-import { rehearsalsApi, faceRecognitionApi } from '../../../services/api';
+import { rehearsalsApi, faceRecognitionApi, programsApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { Rehearsal, Attendance, FaceMatchStatus } from '../../../types';
 import RehearsalInfoCards from './components/RehearsalInfoCards';
@@ -56,9 +56,12 @@ export default function RehearsalDetail() {
       setRehearsal(rehearsalData);
       setAttendance(attendanceData);
 
-      setProgramMembers(attendanceData.map(a => ({
-        id: a.member_id,
-        name: a.member_name || `Member ${a.member_id}`,
+      // Fetch all current program members for the annotation candidate list.
+      // Using attendance data would miss members added to the program after rehearsal creation.
+      const programMembersData = await programsApi.getMembers(rehearsalData.program_id);
+      setProgramMembers(programMembersData.members.map(pm => ({
+        id: pm.member.id,
+        name: pm.member.name,
       })));
 
       // Load saved recognition results

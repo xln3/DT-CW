@@ -10,6 +10,7 @@ import sys
 import os
 from datetime import datetime, date
 
+import re
 import openpyxl
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -20,8 +21,8 @@ from models import Member, User
 
 EXCEL_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    '..', 'assets', '春季训练',
-    '2026年春季学期清华大学学生艺术团舞蹈队全息表统计.xlsx',
+    '..', 'assets',
+    '2026年春季学期清华大学学生艺术团舞蹈队-全息表统计(2).xlsx',
 )
 
 # Column mapping: 0-indexed column → field name
@@ -77,8 +78,13 @@ def parse_date(val):
 def parse_int(val):
     if val is None:
         return None
+    s = str(val).strip()
+    # Strip trailing non-numeric chars (e.g. '2022年' → '2022')
+    s = re.sub(r'[^\d].*$', '', s)
+    if not s:
+        return None
     try:
-        v = int(val)
+        v = int(s)
         # Fix 2-digit years (e.g. 21 → 2021)
         if v < 100:
             v += 2000
