@@ -250,18 +250,26 @@ export default function TeacherPayments() {
 
   return (
     <div className="space-y-6">
-      {canEdit && (
-        <div className="flex justify-end items-center space-x-3">
-          <button onClick={() => setShowSourcesModal(true)} className="btn-secondary">
-            <Settings className="w-4 h-4 mr-2" />
-            来源管理
-          </button>
-          <button onClick={openCreateModal} className="btn-primary">
-            <Plus className="w-4 h-4 mr-2" />
-            添加劳务
-          </button>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">劳务发放管理</h1>
+          <p className="mt-1 text-sm text-gray-500">管理教师劳务费发放记录</p>
         </div>
-      )}
+        <div className="flex items-center space-x-3">
+          {canEdit && (
+            <>
+              <button onClick={() => setShowSourcesModal(true)} className="btn-secondary">
+                <Settings className="w-4 h-4 mr-2" />
+                来源管理
+              </button>
+              <button onClick={openCreateModal} className="btn-primary">
+                <Plus className="w-4 h-4 mr-2" />
+                添加劳务
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Filters */}
       <div className="card">

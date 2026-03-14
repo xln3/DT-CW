@@ -56,8 +56,6 @@ export default function RehearsalDetail() {
       setRehearsal(rehearsalData);
       setAttendance(attendanceData);
 
-      // Fetch all current program members for the annotation candidate list.
-      // Using attendance data would miss members added to the program after rehearsal creation.
       const programMembersData = await programsApi.getMembers(rehearsalData.program_id);
       setProgramMembers(programMembersData.members.map(pm => ({
         id: pm.member.id,

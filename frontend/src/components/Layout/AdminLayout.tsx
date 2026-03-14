@@ -70,7 +70,7 @@ const navItems: NavItem[] = [
     name: '系统设置',
     path: '/admin/settings',
     icon: <Settings className="w-5 h-5" />,
-    roles: ['admin', 'committee', 'program_manager'],
+    roles: ['admin', 'committee'],
   },
 ];
 
@@ -192,7 +192,7 @@ export default function AdminLayout() {
                         </span>
                       </div>
                       <Link
-                        to="/admin/settings?tab=profile"
+                        to="/admin/settings/profile"
                         className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         onClick={() => setUserMenuOpen(false)}
                       >

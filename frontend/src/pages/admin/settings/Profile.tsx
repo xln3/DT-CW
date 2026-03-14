@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Save, AlertCircle, CheckCircle, User, Lock, Edit2 } from 'lucide-react';
+import { ArrowLeft, Save, AlertCircle, CheckCircle, User, Lock, Edit2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { authApi } from '../../../services/api';
 import type { Member } from '../../../types';
@@ -16,6 +17,7 @@ interface UserWithMember {
 }
 
 export default function Profile() {
+  const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
 
   // Profile form state
@@ -175,6 +177,19 @@ export default function Profile() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center space-x-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2 text-gray-400 hover:text-gray-600"
+        >
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">个人设置</h1>
+          <p className="mt-1 text-sm text-gray-500">查看和修改个人信息</p>
+        </div>
+      </div>
+
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
           <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />

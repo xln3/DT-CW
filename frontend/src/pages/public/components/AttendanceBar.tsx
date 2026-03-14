@@ -47,7 +47,7 @@ export default function AttendanceBar({ cell }: AttendanceBarProps) {
       )}
       {absentPct > 0 && (
         <div
-          className="bg-gray-400 h-full flex items-center justify-center"
+          className="bg-gray-400 h-full flex items-center justify-center overflow-hidden"
           style={{ width: `${absentPct}%` }}
         >
           <span className="text-[10px] font-medium text-white drop-shadow-sm">{absent}</span>

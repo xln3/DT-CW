@@ -12,15 +12,16 @@ import Login from './pages/Login';
 import Dashboard from './pages/admin/Dashboard';
 import { MemberDashboard, MyPrograms, MyProgramDetail, MyAttendance, MyProfile } from './pages/member';
 import { MemberList, MemberForm } from './pages/admin/members';
-import { TeacherManagement, TeacherForm } from './pages/admin/teachers';
+import { TeacherList, TeacherForm, TeacherApplications, TeacherPayments } from './pages/admin/teachers';
 import { ProgramList, ProgramForm, ProgramDetail } from './pages/admin/programs';
 import { RehearsalForm, RehearsalDetail } from './pages/admin/rehearsals';
 import RehearsalHall from './pages/admin/RehearsalHall';
 import { CalendarList } from './pages/admin/calendar';
 import { VenueForm } from './pages/admin/venues';
 import { BudgetList } from './pages/admin/budget';
-import { SystemSettings } from './pages/admin/settings';
-import { AttendanceOverview, ProgramAttendance } from './pages/public';
+import { SemesterList, UserList, SettingsHub, Profile } from './pages/admin/settings';
+import { AttendanceOverview, ProgramAttendance, AttendanceSearch } from './pages/public';
+import Calendar from './pages/public/Calendar';
 
 // Query client
 const queryClient = new QueryClient({
@@ -105,9 +106,10 @@ function App() {
 
             {/* Public routes with layout */}
             <Route element={<PublicLayoutWrapper />}>
-              <Route path="/" element={<Navigate to="/attendance" replace />} />
+              <Route path="/" element={<Calendar />} />
               <Route path="/attendance" element={<AttendanceOverview />} />
               <Route path="/attendance/programs/:id" element={<ProgramAttendance />} />
+              <Route path="/attendance/search" element={<AttendanceSearch />} />
             </Route>
 
             {/* Protected member routes */}
@@ -132,9 +134,11 @@ function App() {
                 <Route path="/admin/members/:id/edit" element={<MemberForm />} />
 
                 {/* Teachers */}
-                <Route path="/admin/teachers" element={<TeacherManagement />} />
+                <Route path="/admin/teachers" element={<TeacherList />} />
                 <Route path="/admin/teachers/new" element={<TeacherForm />} />
                 <Route path="/admin/teachers/:id/edit" element={<TeacherForm />} />
+                <Route path="/admin/teachers/applications" element={<TeacherApplications />} />
+                <Route path="/admin/teachers/payments" element={<TeacherPayments />} />
 
                 {/* Programs */}
                 <Route path="/admin/programs" element={<ProgramList />} />
@@ -164,7 +168,10 @@ function App() {
                 <Route path="/admin/budget" element={<BudgetList />} />
 
                 {/* Settings */}
-                <Route path="/admin/settings" element={<SystemSettings />} />
+                <Route path="/admin/settings" element={<SettingsHub />} />
+                <Route path="/admin/settings/semesters" element={<SemesterList />} />
+                <Route path="/admin/settings/users" element={<UserList />} />
+                <Route path="/admin/settings/profile" element={<Profile />} />
               </Route>
             </Route>
 

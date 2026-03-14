@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Users, LogIn } from 'lucide-react';
+import { Calendar, Users, LogIn } from 'lucide-react';
 
 const SITE_TITLE = 'THUDT 2026春季训练';
 
@@ -12,6 +12,7 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
   const location = useLocation();
 
   const navItems = [
+    { path: '/', icon: Calendar, label: '排练时间表' },
     { path: '/attendance', icon: Users, label: '考勤总览' },
   ];
 

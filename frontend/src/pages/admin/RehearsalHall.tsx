@@ -10,9 +10,6 @@ import {
   Upload,
   Download,
   XCircle,
-  MapPin,
-  Edit2,
-  Trash2,
 } from 'lucide-react';
 import { venuesApi, rehearsalsApi, semestersApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -467,8 +464,6 @@ export default function RehearsalHall() {
 
   // Data state
   const [venueId, setVenueId] = useState<number | null>(null);
-  const [venues, setVenues] = useState<{ id: number; name: string; location?: string; is_active: boolean }[]>([]);
-  const [showVenueMenu, setShowVenueMenu] = useState(false);
   const [schedule, setSchedule] = useState<Record<string, VenueScheduleDay>>({});
   const [rehearsals, setRehearsals] = useState<Rehearsal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -501,12 +496,10 @@ export default function RehearsalHall() {
   // Fetch venue + semester on mount
   useEffect(() => {
     Promise.all([
-      venuesApi.list(),
+      venuesApi.list({ is_active: true }),
       semestersApi.getCurrent(),
-    ]).then(([allVenues, sem]) => {
-      setVenues(allVenues);
-      const active = allVenues.filter((v) => v.is_active);
-      if (active.length > 0) setVenueId(active[0].id);
+    ]).then(([venues, sem]) => {
+      if (venues.length > 0) setVenueId(venues[0].id);
       if (sem) setSemester(sem);
     }).catch(console.error);
   }, []);
@@ -695,20 +688,6 @@ export default function RehearsalHall() {
     }
   };
 
-  const handleDeleteVenue = async (id: number) => {
-    if (!confirm('确定要删除此场地吗？')) return;
-    try {
-      await venuesApi.delete(id);
-      setVenues(venues.filter((v) => v.id !== id));
-      if (venueId === id) {
-        const remaining = venues.filter((v) => v.id !== id && v.is_active);
-        setVenueId(remaining.length > 0 ? remaining[0].id : null);
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.error || '删除失败');
-    }
-  };
-
   // Format navigation text
   const weekRangeText = (() => {
     const d1 = dateFromStr(weekDates[0]);
@@ -781,70 +760,10 @@ export default function RehearsalHall() {
             </>
           )}
 
-          {canManageVenue && (
-            <>
-              {venueId && (
-                <button onClick={openTimeSlotsModal} className="btn-secondary py-1 text-sm" title="设置可用时间">
-                  <Settings className="w-4 h-4" />
-                </button>
-              )}
-              <div className="relative">
-                <button
-                  onClick={() => setShowVenueMenu(!showVenueMenu)}
-                  className="btn-secondary py-1 text-sm"
-                  title="场地管理"
-                >
-                  <MapPin className="w-4 h-4" />
-                </button>
-                {showVenueMenu && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowVenueMenu(false)} />
-                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
-                      <div className="py-1">
-                        <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase border-b">场地管理</div>
-                        {venues.length === 0 ? (
-                          <div className="px-4 py-3 text-sm text-gray-500">暂无场地</div>
-                        ) : (
-                          venues.map((v) => (
-                            <div key={v.id} className="flex items-center justify-between px-4 py-2 hover:bg-gray-50">
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-gray-900 truncate">{v.name}</div>
-                                {v.location && <div className="text-xs text-gray-500 truncate">{v.location}</div>}
-                              </div>
-                              <div className="flex items-center space-x-1 ml-2">
-                                <Link
-                                  to={`/admin/venues/${v.id}/edit`}
-                                  className="p-1 text-gray-400 hover:text-primary-600"
-                                  onClick={() => setShowVenueMenu(false)}
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </Link>
-                                <button
-                                  onClick={() => { handleDeleteVenue(v.id); setShowVenueMenu(false); }}
-                                  className="p-1 text-gray-400 hover:text-red-600"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                        <div className="border-t">
-                          <Link
-                            to="/admin/venues/new"
-                            className="flex items-center px-4 py-2 text-sm text-primary-600 hover:bg-gray-50"
-                            onClick={() => setShowVenueMenu(false)}
-                          >
-                            <Plus className="w-4 h-4 mr-2" />
-                            添加场地
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </>
+          {canManageVenue && venueId && (
+            <button onClick={openTimeSlotsModal} className="btn-secondary py-1 text-sm" title="设置可用时间">
+              <Settings className="w-4 h-4" />
+            </button>
           )}
         </div>
       </div>

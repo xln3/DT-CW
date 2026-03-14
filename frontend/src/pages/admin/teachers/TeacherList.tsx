@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, AlertCircle, Users } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, AlertCircle, FileText, DollarSign, Users } from 'lucide-react';
 import EmptyState from '../../../components/EmptyState';
 import TableSkeleton from '../../../components/TableSkeleton';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -33,14 +33,28 @@ export default function TeacherList() {
 
   return (
     <div className="space-y-6">
-      {canEdit && (
-        <div className="flex justify-end">
-          <Link to="/admin/teachers/new" className="btn-primary">
-            <Plus className="w-4 h-4 mr-2" />
-            添加教师
-          </Link>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">教师管理</h1>
+          <p className="mt-1 text-sm text-gray-500">管理艺术团所有教师信息</p>
         </div>
-      )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/admin/teachers/applications" className="btn-secondary">
+            <FileText className="w-4 h-4 mr-2" />
+            入校申请
+          </Link>
+          <Link to="/admin/teachers/payments" className="btn-secondary">
+            <DollarSign className="w-4 h-4 mr-2" />
+            劳务发放
+          </Link>
+          {canEdit && (
+            <Link to="/admin/teachers/new" className="btn-primary">
+              <Plus className="w-4 h-4 mr-2" />
+              添加教师
+            </Link>
+          )}
+        </div>
+      </div>
 
       {/* Filters */}
       <div className="card">

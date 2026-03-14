@@ -178,7 +178,11 @@ export default function TeacherApplications() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">入校申请管理</h1>
+          <p className="mt-1 text-sm text-gray-500">管理教师入校申请和审批</p>
+        </div>
         <button onClick={() => setShowCreateModal(true)} className="btn-primary">
           <Plus className="w-4 h-4 mr-2" />
           创建申请

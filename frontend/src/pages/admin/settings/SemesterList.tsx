@@ -152,14 +152,18 @@ export default function SemesterList() {
 
   return (
     <div className="space-y-6">
-      {isAdmin && (
-        <div className="flex justify-end">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">学期管理</h1>
+          <p className="mt-1 text-sm text-gray-500">管理系统学期设置</p>
+        </div>
+        {isAdmin && (
           <button onClick={() => handleOpenForm()} className="btn-primary">
             <Plus className="w-4 h-4 mr-2" />
             新建学期
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {error && !showForm && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
