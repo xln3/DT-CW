@@ -284,6 +284,23 @@ def get_attendance(rehearsal_id):
     if user.is_program_manager() and not user.can_manage_program(rehearsal.program_id):
         return jsonify({'error': '无权访问该排练'}), 403
 
+    # Auto-sync: ensure all current active program members have attendance records.
+    # Members added after rehearsal creation would otherwise be missing.
+    existing_ids = {r.member_id for r in rehearsal.attendance_records.all()}
+    program = rehearsal.program
+    new_records = []
+    for pm in program.members.filter_by(status='active'):
+        if pm.member_id not in existing_ids:
+            record = Attendance(
+                rehearsal_id=rehearsal_id,
+                member_id=pm.member_id,
+                status=Attendance.STATUS_ABSENT,
+            )
+            db.session.add(record)
+            new_records.append(record)
+    if new_records:
+        db.session.commit()
+
     records = rehearsal.attendance_records.all()
 
     return jsonify({

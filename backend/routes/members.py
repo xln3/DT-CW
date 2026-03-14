@@ -9,11 +9,22 @@ from auth.decorators import login_required, committee_required, admin_required
 from auth.permissions import Permission, check_permission
 
 
+# Correct pinyin for common polyphonic Chinese surnames
+_SURNAME_PINYIN = {
+    '曾': 'zeng', '乐': 'yue', '仇': 'qiu', '解': 'xie',
+    '单': 'shan', '朴': 'piao', '翟': 'zhai', '种': 'chong',
+}
+
 def _sort_members_by_pinyin(members):
-    """Sort members by pinyin of their names."""
-    def sort_key(m):
-        return ''.join(lazy_pinyin(m.name or ''))
-    return sorted(members, key=sort_key)
+    """Sort members by pinyin of their names, with surname polyphonic corrections."""
+    def sort_key(name):
+        if not name:
+            return ''
+        first = name[0]
+        if first in _SURNAME_PINYIN:
+            return _SURNAME_PINYIN[first] + ''.join(lazy_pinyin(name[1:]))
+        return ''.join(lazy_pinyin(name))
+    return sorted(members, key=lambda m: sort_key(m.name or ''))
 
 
 
@@ -153,8 +164,7 @@ def list_members():
     # Filter options
     status = request.args.get('status')
     search = request.args.get('search', '').strip()
-    sort = request.args.get('sort', 'pinyin')  # pinyin, birthday, join_year
-    graduating = request.args.get('graduating')  # '1' to filter graduating members
+    sort = request.args.get('sort', 'pinyin')  # pinyin (default) or birthday
     page = request.args.get('page', type=int)
     per_page = request.args.get('per_page', 20, type=int)
 
@@ -162,9 +172,6 @@ def list_members():
 
     if status:
         query = query.filter_by(status=status)
-
-    if graduating == '1':
-        query = query.filter_by(graduating_this_semester=True)
 
     if search:
         query = query.filter(
@@ -179,7 +186,7 @@ def list_members():
     members = query.all()
 
     if sort == 'birthday':
-        # Sort by month-day (Jan 1 → Dec 31), ignoring year
+        # Sort by month-day (Jan 1 → Dec 31), ignoring birth year
         sorted_members = sorted(
             members,
             key=lambda m: (m.birth_date.month, m.birth_date.day) if m.birth_date else (13, 0),
