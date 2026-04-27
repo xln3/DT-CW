@@ -139,27 +139,28 @@ def get_my_program_detail(program_id):
     })
 
 
+# Programs that count cumulative attendance (encouragement) instead of a rate.
+# Listed as exact program names. If you add another open-training-style program,
+# add it here.
+CUMULATIVE_PROGRAMS = {'芭蕾基训'}
+
+
 @member_portal_bp.route('/my-attendance', methods=['GET'])
 @login_required
 def get_my_attendance():
-    """Get attendance records for the current member."""
+    """Get attendance records for the current member.
+
+    Each program is reported with its own stats. Programs in CUMULATIVE_PROGRAMS
+    are reported in cumulative mode (count of attended sessions, no rate);
+    everything else uses the regular rate mode. There is no overall aggregate
+    rate — different programs have different cadences and combining them is
+    misleading.
+    """
     user = g.current_user
     semester_id = request.args.get('semester_id', type=int)
 
     if not user.member_id:
-        return jsonify({
-            'member': None,
-            'programs': [],
-            'overall_stats': {
-                'total_rehearsals': 0,
-                'normal_count': 0,
-                'late_count': 0,
-                'early_leave_count': 0,
-                'absent_count': 0,
-                'leave_count': 0,
-                'attendance_rate': 100.0
-            }
-        })
+        return jsonify({'member': None, 'programs': []})
 
     member = Member.query.get(user.member_id)
     if not member:
@@ -169,22 +170,12 @@ def get_my_attendance():
         current_semester = Semester.get_current()
         semester_id = current_semester.id if current_semester else None
 
-    # Get all program memberships
     program_memberships = ProgramMember.query.filter_by(
         member_id=member.id,
         status='active'
     ).all()
 
     programs_data = []
-    total_stats = {
-        'total_rehearsals': 0,
-        'normal_count': 0,
-        'late_count': 0,
-        'early_leave_count': 0,
-        'absent_count': 0,
-        'leave_count': 0
-    }
-
     for pm in program_memberships:
         program = pm.program
         if not program:
@@ -192,14 +183,11 @@ def get_my_attendance():
         if semester_id and program.semester_id != semester_id:
             continue
 
-        # Get attendance records (only from rehearsals that count towards attendance)
         all_records = Attendance.query.join(Rehearsal).filter(
             Attendance.member_id == member.id,
             Rehearsal.program_id == program.id,
             Rehearsal.status != 'cancelled'
         ).all()
-
-        # Filter to only rehearsals that count towards attendance
         records = [r for r in all_records if counts_for_attendance(r.rehearsal)]
 
         total = len(records)
@@ -213,33 +201,29 @@ def get_my_attendance():
             Attendance.STATUS_LEAVE_EARLY
         ])
 
-        # Add to totals
-        total_stats['total_rehearsals'] += total
-        total_stats['normal_count'] += normal
-        total_stats['late_count'] += late
-        total_stats['early_leave_count'] += early_leave
-        total_stats['absent_count'] += absent
-        total_stats['leave_count'] += leave
-
+        # "attended" = physically showed up at any point
+        # (normal + late + early_leave). Pure leave doesn't count toward
+        # encouragement; absent obviously doesn't.
+        attended_count = normal + late + early_leave
+        # "rate" mode: anything other than absent is acceptable
+        # (leave counts as effective participation)
         effective = normal + late + early_leave + leave
+
+        mode = 'cumulative' if program.name in CUMULATIVE_PROGRAMS else 'rate'
+
         programs_data.append({
             'program_id': program.id,
             'program_name': program.name,
+            'attendance_mode': mode,
             'total_rehearsals': total,
             'normal_count': normal,
             'late_count': late,
             'early_leave_count': early_leave,
             'absent_count': absent,
             'leave_count': leave,
-            'attendance_rate': round(effective / total * 100, 1) if total > 0 else 100.0
+            'attended_count': attended_count,
+            'attendance_rate': round(effective / total * 100, 1) if total > 0 else 100.0,
         })
-
-    # Calculate overall rate
-    overall_rate = 100.0
-    if total_stats['total_rehearsals'] > 0:
-        effective = (total_stats['normal_count'] + total_stats['late_count']
-                     + total_stats['early_leave_count'] + total_stats['leave_count'])
-        overall_rate = round(effective / total_stats['total_rehearsals'] * 100, 1)
 
     return jsonify({
         'member': {
@@ -249,15 +233,6 @@ def get_my_attendance():
             'department': member.department or ''
         },
         'programs': programs_data,
-        'overall_stats': {
-            'total_rehearsals': total_stats['total_rehearsals'],
-            'normal_count': total_stats['normal_count'],
-            'late_count': total_stats['late_count'],
-            'early_leave_count': total_stats['early_leave_count'],
-            'absent_count': total_stats['absent_count'],
-            'leave_count': total_stats['leave_count'],
-            'attendance_rate': overall_rate
-        }
     })
 
 
