@@ -1175,6 +1175,11 @@ interface RecognizePhotoResponse {
 
 // Member Portal API (for member role users)
 export const memberPortalApi = {
+  listSemesters: async () => {
+    const response = await api.get<{ semesters: Semester[] }>('/member/semesters');
+    return response.data.semesters;
+  },
+
   getMyPrograms: async () => {
     const response = await api.get<{
       programs: {

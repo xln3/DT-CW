@@ -13,6 +13,16 @@ from utils.attendance import is_rehearsal_completed, counts_for_attendance
 member_portal_bp = Blueprint('member_portal', __name__)
 
 
+@member_portal_bp.route('/semesters', methods=['GET'])
+@login_required
+def list_semesters():
+    """Read-only list of semesters, for member-side semester switcher."""
+    semesters = Semester.query.order_by(Semester.start_date.desc()).all()
+    return jsonify({
+        'semesters': [s.to_dict() for s in semesters],
+    })
+
+
 @member_portal_bp.route('/my-programs', methods=['GET'])
 @login_required
 def get_my_programs():

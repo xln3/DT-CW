@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ClipboardCheck, AlertTriangle, Check, Clock, X } from 'lucide-react';
-import { memberPortalApi, semestersApi } from '../../services/api';
+import { memberPortalApi } from '../../services/api';
 import type { Semester } from '../../types';
 
 interface ProgramAttendance {
@@ -44,7 +44,7 @@ export default function MyAttendance() {
   useEffect(() => {
     const fetchSemesters = async () => {
       try {
-        const semesterList = await semestersApi.list();
+        const semesterList = await memberPortalApi.listSemesters();
         setSemesters(semesterList);
         const current = semesterList.find((s) => s.is_current);
         if (current) {
