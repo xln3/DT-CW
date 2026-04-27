@@ -36,7 +36,7 @@ for (const u of retryUsers) {
         contentReady = await page.waitForSelector('[data-testid="my-attendance-loaded"]', { timeout: 25000 })
           .then(() => true).catch(() => false);
       } else if (finalUrl.includes('/admin')) {
-        contentReady = await page.waitForSelector('h1, h2', { timeout: 25000 })
+        contentReady = await page.waitForSelector('[data-testid="dashboard-loaded"]', { timeout: 25000 })
           .then(() => true).catch(() => false);
       }
       const spinnerGone = await page.waitForFunction(

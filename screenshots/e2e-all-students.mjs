@@ -89,8 +89,9 @@ async function tryLogin(user) {
         timeout: 18000,
       }).then(() => true).catch(() => false);
     } else if (finalUrl.includes('/admin')) {
-      contentReady = await page.waitForSelector('h1, h2', { timeout: 18000 })
-        .then(() => true).catch(() => false);
+      contentReady = await page.waitForSelector('[data-testid="dashboard-loaded"]', {
+        timeout: 18000,
+      }).then(() => true).catch(() => false);
     }
     const spinnerGone = await page.waitForFunction(
       () => document.querySelectorAll('.animate-spin').length === 0,
