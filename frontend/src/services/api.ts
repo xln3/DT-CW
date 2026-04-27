@@ -451,6 +451,23 @@ export const rehearsalsApi = {
   downloadTemplate: () => {
     return `${api.defaults.baseURL}/admin/rehearsals/import-template`;
   },
+
+  batchCancel: async (data: {
+    date_from: string;
+    date_to: string;
+    program_ids?: number[];
+    reason?: string;
+    exclude_from_attendance?: boolean;
+  }) => {
+    const response = await api.post<{
+      message: string;
+      cancelled_count: number;
+      cancelled_ids: number[];
+      denied_count: number;
+      denied_ids: number[];
+    }>('/admin/rehearsals/batch-cancel', data);
+    return response.data;
+  },
 };
 
 // Dashboard API

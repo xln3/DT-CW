@@ -48,6 +48,10 @@ class Rehearsal(db.Model):
                                          cascade='all, delete-orphan')
     recognition_errors = db.relationship('RecognitionError', back_populates='rehearsal', lazy='dynamic',
                                          cascade='all, delete-orphan')
+    # Venue bookings - cascade delete (a booking exists to hold the slot for this rehearsal;
+    # when the rehearsal is gone, the booking has no meaning)
+    venue_bookings = db.relationship('VenueBooking', back_populates='rehearsal', lazy='dynamic',
+                                     cascade='all, delete-orphan')
 
     # Rehearsal status constants
     STATUS_SCHEDULED = 'scheduled'

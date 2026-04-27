@@ -22,8 +22,45 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import create_engine, text, inspect
+from datetime import date as _date, time as _time, datetime as _datetime
+
+from sqlalchemy import create_engine, text, inspect, MetaData, Table
 from sqlalchemy.orm import Session
+
+
+def _coerce(value, type_name):
+    """Cross-engine value coercion. SQLite stores BOOLEAN as INTEGER 0/1 and
+    DATE/TIME/DATETIME as ISO strings; PG strict-types reject them.
+    Returns the value re-cast to the target column's expected Python type.
+    """
+    if value is None:
+        return None
+    if type_name == 'Boolean':
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int,)):
+            return bool(value)
+        if isinstance(value, str):
+            return value.strip().lower() in ('1', 'true', 't', 'yes', 'y')
+        return bool(value)
+    if type_name == 'Date':
+        if isinstance(value, _date) and not isinstance(value, _datetime):
+            return value
+        if isinstance(value, _datetime):
+            return value.date()
+        if isinstance(value, str):
+            return _date.fromisoformat(value[:10])
+    if type_name == 'Time':
+        if isinstance(value, _time):
+            return value
+        if isinstance(value, str):
+            return _time.fromisoformat(value.split('.')[0])
+    if type_name == 'DateTime':
+        if isinstance(value, _datetime):
+            return value
+        if isinstance(value, str):
+            return _datetime.fromisoformat(value.replace('T', ' '))
+    return value
 
 
 # Tables in foreign-key dependency order.
@@ -93,47 +130,50 @@ def get_all_table_names():
 
 
 def copy_table(src_engine, tgt_engine, table_name, tgt_columns):
-    """Copy all rows from a SQLite table to PostgreSQL.
+    """Copy all rows from a SQLite table to PostgreSQL with type-aware coercion.
+
+    Uses Table reflection on both sides so SQLAlchemy can bind values via the
+    target column's type, but we still pre-coerce SQLite-isms (int-as-bool,
+    iso-string-as-date) defensively because reflected types behave differently
+    across versions and we want zero surprises.
 
     Returns the number of rows copied.
     """
+    src_inspector = inspect(src_engine)
+    if table_name not in src_inspector.get_table_names():
+        return 0
+
+    src_md = MetaData()
+    tgt_md = MetaData()
+    src_table = Table(table_name, src_md, autoload_with=src_engine)
+    tgt_table = Table(table_name, tgt_md, autoload_with=tgt_engine)
+
+    common_cols = [c.name for c in src_table.columns if c.name in tgt_columns]
+    if not common_cols:
+        return 0
+
+    tgt_col_types = {c.name: type(c.type).__name__ for c in tgt_table.columns}
+
     with src_engine.connect() as src_conn:
-        # Check if table exists in source
-        src_inspector = inspect(src_engine)
-        if table_name not in src_inspector.get_table_names():
-            return 0
+        rows = src_conn.execute(src_table.select()).fetchall()
+    if not rows:
+        return 0
 
-        rows = src_conn.execute(text(f'SELECT * FROM {table_name}')).fetchall()
-        if not rows:
-            return 0
-
-        # Get column names from the result
-        src_cols = src_conn.execute(text(f'SELECT * FROM {table_name} LIMIT 1')).keys()
-        src_col_names = list(src_cols)
-
-        # Only copy columns that exist in both source and target
-        common_cols = [c for c in src_col_names if c in tgt_columns]
-        if not common_cols:
-            return 0
-
-    col_list = ', '.join(f'"{c}"' for c in common_cols)
-    param_list = ', '.join(f':{c}' for c in common_cols)
-    insert_sql = f'INSERT INTO {table_name} ({col_list}) VALUES ({param_list})'
-
-    # Batch insert for performance
+    src_col_names = [c.name for c in src_table.columns]
     batch_size = 500
     total = len(rows)
 
-    with tgt_engine.connect() as tgt_conn:
+    with tgt_engine.begin() as tgt_conn:
         for i in range(0, total, batch_size):
             batch = rows[i:i + batch_size]
             params = []
             for row in batch:
                 row_dict = dict(zip(src_col_names, row))
-                # Only include common columns
-                params.append({c: row_dict[c] for c in common_cols})
-            tgt_conn.execute(text(insert_sql), params)
-        tgt_conn.commit()
+                params.append({
+                    c: _coerce(row_dict[c], tgt_col_types.get(c, ''))
+                    for c in common_cols
+                })
+            tgt_conn.execute(tgt_table.insert(), params)
 
     return total
 

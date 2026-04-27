@@ -98,7 +98,7 @@ class VenueBooking(db.Model):
     # Relationships
     venue = db.relationship('Venue', back_populates='bookings')
     program = db.relationship('Program')
-    rehearsal = db.relationship('Rehearsal')
+    rehearsal = db.relationship('Rehearsal', back_populates='venue_bookings')
     user = db.relationship('User')
 
     STATUS_CONFIRMED = 'confirmed'

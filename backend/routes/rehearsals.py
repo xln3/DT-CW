@@ -1,12 +1,34 @@
 """Rehearsal management routes."""
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, g, send_file
 
 from database import db
-from models import Rehearsal, Program, Teacher, Attendance, AuditLog
+from models import Rehearsal, Program, Teacher, Attendance, AuditLog, VenueBooking, CalendarEvent
 from auth.decorators import login_required, committee_required
 from auth.permissions import Permission, check_program_permission
 from utils.attendance import VALID_LEAVE_TYPES, VALID_STATUSES
+
+
+def _cancel_related_bookings(rehearsal):
+    """Release venue bookings when a rehearsal is cancelled.
+
+    Keeps the booking rows so that the venue history / audit is intact, but flips
+    their status so the slot is no longer counted as occupied.
+    """
+    for booking in rehearsal.venue_bookings:
+        if booking.status != VenueBooking.STATUS_CANCELLED:
+            booking.status = VenueBooking.STATUS_CANCELLED
+
+
+def _detach_calendar_events(rehearsal_id):
+    """Null-out calendar events' rehearsal_id before deleting the rehearsal.
+
+    Preserves the calendar event itself (users may have added notes to it) while
+    avoiding a dangling foreign key after the rehearsal is deleted.
+    """
+    CalendarEvent.query.filter_by(rehearsal_id=rehearsal_id).update(
+        {CalendarEvent.rehearsal_id: None}, synchronize_session=False
+    )
 
 rehearsals_bp = Blueprint('rehearsals', __name__)
 
@@ -212,7 +234,10 @@ def update_rehearsal(rehearsal_id):
 
     if 'status' in data:
         if data['status'] in ['scheduled', 'completed', 'cancelled']:
+            previous_status = rehearsal.status
             rehearsal.status = data['status']
+            if data['status'] == 'cancelled' and previous_status != 'cancelled':
+                _cancel_related_bookings(rehearsal)
 
     if 'counts_towards_attendance' in data:
         rehearsal.counts_towards_attendance = bool(data['counts_towards_attendance'])
@@ -256,6 +281,7 @@ def delete_rehearsal(rehearsal_id):
     program_id = rehearsal.program_id
     scheduled_date = str(rehearsal.scheduled_date)
 
+    _detach_calendar_events(rehearsal.id)
     db.session.delete(rehearsal)
     db.session.commit()
 
@@ -271,6 +297,96 @@ def delete_rehearsal(rehearsal_id):
     )
 
     return jsonify({'message': '排练已删除'})
+
+
+@rehearsals_bp.route('/batch-cancel', methods=['POST'])
+@login_required
+def batch_cancel_rehearsals():
+    """Batch cancel rehearsals, e.g. when a holiday covers a whole week.
+
+    Body: {
+      "date_from": "YYYY-MM-DD",
+      "date_to":   "YYYY-MM-DD",
+      "program_ids": [1,2] (optional - default: all accessible),
+      "reason": "五一假期" (optional but recommended, stored in exclusion_reason),
+      "exclude_from_attendance": true (optional, default true)
+    }
+    Only scheduled rehearsals in the range are touched; already-cancelled are skipped.
+    Venue bookings for the cancelled rehearsals are released.
+    Returns summary with affected rehearsal IDs.
+    """
+    data = request.get_json() or {}
+    user = g.current_user
+
+    date_from = data.get('date_from')
+    date_to = data.get('date_to')
+    if not date_from or not date_to:
+        return jsonify({'error': '请提供日期范围 date_from / date_to'}), 400
+    try:
+        from_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+        to_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': '日期格式错误，应为 YYYY-MM-DD'}), 400
+    if from_date > to_date:
+        return jsonify({'error': 'date_from 不能晚于 date_to'}), 400
+
+    program_ids = data.get('program_ids') or []
+    reason = (data.get('reason') or '').strip()
+    exclude_from_attendance = bool(data.get('exclude_from_attendance', True))
+
+    query = Rehearsal.query.filter(
+        Rehearsal.scheduled_date >= from_date,
+        Rehearsal.scheduled_date <= to_date,
+        Rehearsal.status != Rehearsal.STATUS_CANCELLED,
+    )
+    if program_ids:
+        query = query.filter(Rehearsal.program_id.in_(program_ids))
+
+    candidates = query.all()
+
+    allowed = []
+    denied = []
+    for r in candidates:
+        if check_program_permission(user, Permission.REHEARSAL_EDIT, r.program_id):
+            allowed.append(r)
+        else:
+            denied.append(r.id)
+
+    cancelled_ids = []
+    for r in allowed:
+        r.status = Rehearsal.STATUS_CANCELLED
+        if exclude_from_attendance:
+            r.counts_towards_attendance = False
+            r.exclusion_reason = reason or '批量取消'
+        _cancel_related_bookings(r)
+        cancelled_ids.append(r.id)
+
+    if cancelled_ids:
+        db.session.commit()
+        AuditLog.log(
+            action=AuditLog.ACTION_UPDATE,
+            user=user,
+            module='attendance',
+            resource_type='rehearsal',
+            resource_id=None,
+            details={
+                'batch_cancel': True,
+                'date_from': date_from,
+                'date_to': date_to,
+                'program_ids': program_ids or 'all',
+                'reason': reason,
+                'affected_ids': cancelled_ids,
+            },
+            ip_address=request.remote_addr,
+        )
+
+    return jsonify({
+        'message': f'已取消 {len(cancelled_ids)} 条排练',
+        'cancelled_count': len(cancelled_ids),
+        'cancelled_ids': cancelled_ids,
+        'denied_count': len(denied),
+        'denied_ids': denied,
+    })
 
 
 # Attendance management

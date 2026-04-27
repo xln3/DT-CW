@@ -26,6 +26,7 @@ dist/
 .env
 .env.local
 .env.*.local
+dt-cw.env
 venv/
 .venv/
 
