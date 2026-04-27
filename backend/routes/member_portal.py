@@ -7,7 +7,7 @@ from models import (
     Program, Member, Rehearsal, Attendance, Semester, ProgramMember
 )
 from auth import login_required
-from utils.attendance import is_rehearsal_completed, counts_for_attendance
+from utils.attendance import is_rehearsal_completed, counts_for_attendance, attendance_mode_for
 
 
 member_portal_bp = Blueprint('member_portal', __name__)
@@ -139,12 +139,6 @@ def get_my_program_detail(program_id):
     })
 
 
-# Programs that count cumulative attendance (encouragement) instead of a rate.
-# Listed as exact program names. If you add another open-training-style program,
-# add it here.
-CUMULATIVE_PROGRAMS = {'芭蕾基训'}
-
-
 @member_portal_bp.route('/my-attendance', methods=['GET'])
 @login_required
 def get_my_attendance():
@@ -209,7 +203,7 @@ def get_my_attendance():
         # (leave counts as effective participation)
         effective = normal + late + early_leave + leave
 
-        mode = 'cumulative' if program.name in CUMULATIVE_PROGRAMS else 'rate'
+        mode = attendance_mode_for(program.name)
 
         programs_data.append({
             'program_id': program.id,

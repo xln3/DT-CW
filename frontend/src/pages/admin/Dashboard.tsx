@@ -1,68 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  ClipboardCheck,
-  ArrowRight,
-} from 'lucide-react';
+import { ClipboardCheck, ArrowRight, Crown, Sparkles, Users } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { memberPortalApi, publicApi, rehearsalsApi, semestersApi } from '../../services/api';
-import type { Semester, Rehearsal } from '../../types';
-import { DAY_NAMES } from '../../types';
+import { dashboardApi, memberPortalApi, publicApi } from '../../services/api';
+import type { ManagedProgramAttendance } from '../../services/api';
 
-// --- Helpers ---
-
-function toDateStr(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function todayStr(): string {
-  return toDateStr(new Date());
-}
-
-function getMonday(date: Date): Date {
-  const d = new Date(date);
-  const diff = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - diff);
-  return d;
-}
-
-function getMondayStr(date: Date): string {
-  return toDateStr(getMonday(date));
-}
-
-function dateFromStr(s: string): Date {
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function getWeeksInRange(startDate: string, endDate: string): string[][] {
-  const weeks: string[][] = [];
-  const [ey, em, ed] = endDate.split('-').map(Number);
-  const end = new Date(ey, em - 1, ed);
-  const [sy, sm, sd] = startDate.split('-').map(Number);
-  const monday = getMonday(new Date(sy, sm - 1, sd));
-
-  while (monday <= end) {
-    const week: string[] = [];
-    for (let i = 0; i < 7; i++) {
-      const dt = new Date(monday);
-      dt.setDate(dt.getDate() + i);
-      week.push(toDateStr(dt));
-    }
-    weeks.push(week);
-    monday.setDate(monday.getDate() + 7);
-  }
-  return weeks;
-}
-
-function shortTime(time: string): string {
-  return time.slice(0, 5);
-}
-
-// --- Attendance Overview Component ---
+// --- Personal Attendance (compact, top of dashboard) ---
 
 interface ProgramAttendance {
   program_id: number;
@@ -88,6 +31,12 @@ function getRateColor(rate: number) {
   return 'text-red-600';
 }
 
+function getRateBarColor(rate: number) {
+  if (rate >= 90) return 'bg-green-500';
+  if (rate >= 70) return 'bg-yellow-500';
+  return 'bg-red-500';
+}
+
 function PersonalAttendanceCard({ data }: { data: PersonalAttendanceData }) {
   if (data.programs.length === 0) {
     return <p className="text-gray-500 text-center py-4">本学期暂无考勤数据</p>;
@@ -105,16 +54,7 @@ function PersonalAttendanceCard({ data }: { data: PersonalAttendanceData }) {
           ) : (
             <>
               <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className={`h-full ${
-                    prog.attendance_rate >= 90
-                      ? 'bg-green-500'
-                      : prog.attendance_rate >= 70
-                      ? 'bg-yellow-500'
-                      : 'bg-red-500'
-                  }`}
-                  style={{ width: `${prog.attendance_rate}%` }}
-                />
+                <div className={`h-full ${getRateBarColor(prog.attendance_rate)}`} style={{ width: `${prog.attendance_rate}%` }} />
               </div>
               <span className={`text-sm font-medium w-12 text-right ${getRateColor(prog.attendance_rate)}`}>
                 {prog.attendance_rate}%
@@ -127,7 +67,7 @@ function PersonalAttendanceCard({ data }: { data: PersonalAttendanceData }) {
   );
 }
 
-// --- Team Overview Component ---
+// --- Team Overview (admin without member_id) ---
 
 interface TeamProgramOverview {
   id: number;
@@ -142,19 +82,13 @@ function TeamAttendanceCard({ programs }: { programs: TeamProgramOverview[] }) {
   if (programs.length === 0) {
     return <p className="text-gray-500 text-center py-4">暂无节目数据</p>;
   }
-
   return (
     <div className="space-y-2">
       {programs.map((prog) => (
         <div key={prog.id} className="flex items-center gap-3">
           <span className="text-sm text-gray-700 w-24 truncate flex-shrink-0">{prog.name}</span>
           <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className={`h-full ${
-                prog.attendance_rate >= 90 ? 'bg-green-500' : prog.attendance_rate >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-              }`}
-              style={{ width: `${prog.attendance_rate}%` }}
-            />
+            <div className={`h-full ${getRateBarColor(prog.attendance_rate)}`} style={{ width: `${prog.attendance_rate}%` }} />
           </div>
           <span className={`text-sm font-medium w-12 text-right ${getRateColor(prog.attendance_rate)}`}>
             {prog.attendance_rate}%
@@ -168,85 +102,85 @@ function TeamAttendanceCard({ programs }: { programs: TeamProgramOverview[] }) {
   );
 }
 
-// --- Semester Schedule Grid ---
+// --- Managed-programs attendance breakdown ---
 
-interface SemesterScheduleProps {
-  semester: Semester;
-  rehearsals: Rehearsal[];
-}
-
-function SemesterScheduleGrid({ semester, rehearsals }: SemesterScheduleProps) {
-  const today = todayStr();
-  const weeks = useMemo(
-    () => getWeeksInRange(semester.start_date, semester.end_date),
-    [semester.start_date, semester.end_date],
-  );
-
-  const rehearsalsByDate = useMemo(() => {
-    const map: Record<string, Rehearsal[]> = {};
-    for (const r of rehearsals) {
-      if (r.status === 'cancelled') continue;
-      const d = r.scheduled_date;
-      if (!map[d]) map[d] = [];
-      map[d].push(r);
-    }
-    return map;
-  }, [rehearsals]);
-
-  const semStart = semester.start_date;
-  const semEnd = semester.end_date;
+function ManagedProgramCard({ program }: { program: ManagedProgramAttendance }) {
+  const isCumulative = program.attendance_mode === 'cumulative';
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="bg-gray-50">
-            <th className="p-1.5 text-center border-b w-8 text-gray-400 font-medium">周</th>
-            {DAY_NAMES.map((name) => (
-              <th key={name} className="p-1.5 text-center border-b text-gray-700 font-medium">{name}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {weeks.map((week, wi) => (
-            <tr key={wi} className="border-b last:border-b-0">
-              <td className="p-1 text-center text-gray-400 border-r text-[10px]">{wi + 1}</td>
-              {week.map((dateStr) => {
-                const isToday = dateStr === today;
-                const inSemester = dateStr >= semStart && dateStr <= semEnd;
-                const d = dateFromStr(dateStr);
-                const dayRehearsals = rehearsalsByDate[dateStr] || [];
-
-                return (
-                  <td
-                    key={dateStr}
-                    className={`p-1 border-r last:border-r-0 align-top ${
-                      !inSemester ? 'bg-gray-50/80' : ''
-                    } ${isToday ? 'bg-primary-50' : ''}`}
-                    style={{ minWidth: '70px' }}
-                  >
-                    <div className={`text-[10px] font-medium ${
-                      !inSemester ? 'text-gray-300' : isToday ? 'text-primary-600' : 'text-gray-600'
-                    }`}>
-                      {d.getMonth() + 1}/{d.getDate()}
-                    </div>
-                    {inSemester && dayRehearsals.map((r) => (
-                      <div
-                        key={r.id}
-                        className="mt-0.5 text-[9px] rounded px-0.5 truncate text-white"
-                        style={{ backgroundColor: r.program_color || '#6B7280' }}
-                        title={`${r.program_name} ${r.scheduled_start_time ? shortTime(r.scheduled_start_time) : ''}`}
-                      >
-                        {r.program_name!.slice(0, 4)}
-                      </div>
-                    ))}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className={`card ${isCumulative ? 'border-purple-200' : ''}`}>
+      <div className="card-header flex items-center justify-between gap-2">
+        <div className="flex items-center min-w-0">
+          {isCumulative && <Sparkles className="w-4 h-4 text-purple-500 mr-1.5 flex-shrink-0" />}
+          <h3 className="font-medium text-gray-900 truncate">{program.program_name}</h3>
+        </div>
+        <div className="flex items-center text-xs text-gray-500 flex-shrink-0">
+          <Users className="w-3.5 h-3.5 mr-1" />
+          {program.member_count} 人
+          <span className="mx-2 text-gray-300">·</span>
+          {program.total_rehearsals} 次{isCumulative ? '训练' : '排练'}
+          <Link
+            to={`/admin/programs/${program.program_id}`}
+            className="ml-3 text-primary-600 hover:text-primary-700 flex items-center"
+          >
+            详情<ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+          </Link>
+        </div>
+      </div>
+      <div className="card-body p-0">
+        {program.members.length === 0 ? (
+          <p className="text-gray-500 text-center py-6 text-sm">暂无成员</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">成员</th>
+                  {isCumulative ? (
+                    <th className="px-3 py-2 text-right font-medium">累计参加</th>
+                  ) : (
+                    <th className="px-3 py-2 text-right font-medium">出勤率</th>
+                  )}
+                  <th className="px-3 py-2 text-right font-medium hidden sm:table-cell">正常</th>
+                  <th className="px-3 py-2 text-right font-medium hidden sm:table-cell">迟到/早退</th>
+                  <th className="px-3 py-2 text-right font-medium hidden sm:table-cell">缺勤</th>
+                  <th className="px-3 py-2 text-right font-medium hidden md:table-cell">请假</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {program.members.map((m) => (
+                  <tr key={m.member_id}>
+                    <td className="px-3 py-2 text-gray-900">
+                      <span className="inline-flex items-center">
+                        {m.is_leader && <Crown className="w-3.5 h-3.5 text-amber-500 mr-1" />}
+                        {m.member_name}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {isCumulative ? (
+                        <span className="text-purple-700 font-medium">
+                          {m.attended_count}
+                          <span className="text-gray-400 font-normal"> / {m.total_rehearsals}</span>
+                        </span>
+                      ) : (
+                        <span className={`font-medium ${getRateColor(m.attendance_rate)}`}>
+                          {m.attendance_rate}%
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right text-green-700 hidden sm:table-cell">{m.normal_count}</td>
+                    <td className="px-3 py-2 text-right text-yellow-700 hidden sm:table-cell">
+                      {m.late_count + m.early_leave_count}
+                    </td>
+                    <td className="px-3 py-2 text-right text-red-700 hidden sm:table-cell">{m.absent_count}</td>
+                    <td className="px-3 py-2 text-right text-blue-700 hidden md:table-cell">{m.leave_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -255,64 +189,53 @@ function SemesterScheduleGrid({ semester, rehearsals }: SemesterScheduleProps) {
 
 export default function Dashboard() {
   const { user } = useAuth();
-
-  const [semester, setSemester] = useState<Semester | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Attendance data
   const [personalData, setPersonalData] = useState<PersonalAttendanceData | null>(null);
   const [teamPrograms, setTeamPrograms] = useState<TeamProgramOverview[]>([]);
-  const hasMemberId = !!user?.member_id;
+  const [managedPrograms, setManagedPrograms] = useState<ManagedProgramAttendance[]>([]);
 
-  // Semester schedule data
-  const [semRehearsals, setSemRehearsals] = useState<Rehearsal[]>([]);
+  const hasMemberId = !!user?.member_id;
+  // Anyone with admin-side access (admin / committee / program_manager) sees
+  // the per-member breakdown of programs they can manage. Members never reach
+  // this page (they're routed to /member).
+  const canManagePrograms = !!user
+    && (user.role === 'admin' || user.role === 'committee' || user.role === 'program_manager');
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
-        const sem = await semestersApi.getCurrent();
-        setSemester(sem);
+        const tasks: Promise<unknown>[] = [];
 
-        // Fetch attendance data
         if (hasMemberId) {
-          const data = await memberPortalApi.getMyAttendance(sem?.id);
-          setPersonalData(data);
+          tasks.push(memberPortalApi.getMyAttendance().then((d) => setPersonalData(d)));
         } else {
-          const data = await publicApi.getAttendanceOverview(sem?.id);
-          setTeamPrograms(data.programs || []);
+          tasks.push(publicApi.getAttendanceOverview().then((d) => setTeamPrograms(d.programs || [])));
         }
 
-        // Fetch semester rehearsals for the grid
-        if (sem) {
-          const startDate = getMondayStr(dateFromStr(sem.start_date));
-          const semEnd = dateFromStr(sem.end_date);
-          const lastMonday = getMonday(semEnd);
-          lastMonday.setDate(lastMonday.getDate() + 6);
-          const endDate = toDateStr(lastMonday);
-
-          const rehs = await rehearsalsApi.list({
-            date_from: startDate,
-            date_to: endDate,
-          });
-          setSemRehearsals(rehs);
+        if (canManagePrograms) {
+          tasks.push(
+            dashboardApi.getManagedProgramsAttendance().then((d) => setManagedPrograms(d.programs)),
+          );
         }
+
+        await Promise.all(tasks);
       } catch (err) {
         console.error('Dashboard load error:', err);
       } finally {
         setIsLoading(false);
       }
     };
-
     load();
-  }, [hasMemberId]);
+  }, [hasMemberId, canManagePrograms]);
 
   if (isLoading) {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">仪表盘</h1>
-          <p className="mt-1 text-sm text-gray-500">欢迎回来，{user?.display_name}！</p>
+          <p className="mt-1 text-sm text-gray-500">欢迎回来,{user?.display_name}!</p>
         </div>
         <div className="flex items-center justify-center min-h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -322,13 +245,13 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="dashboard-loaded">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">仪表盘</h1>
-        <p className="mt-1 text-sm text-gray-500">欢迎回来，{user?.display_name}！</p>
+        <p className="mt-1 text-sm text-gray-500">欢迎回来,{user?.display_name}!</p>
       </div>
 
-      {/* Attendance Overview */}
+      {/* Personal / team attendance summary */}
       <div className="card">
         <div className="card-header flex items-center justify-between">
           <div className="flex items-center">
@@ -337,12 +260,8 @@ export default function Dashboard() {
               {hasMemberId ? '我的考勤' : '全队考勤概览'}
             </h2>
           </div>
-          <Link
-            to="/attendance"
-            className="text-sm text-primary-600 hover:text-primary-700 flex items-center"
-          >
-            详情
-            <ArrowRight className="w-4 h-4 ml-1" />
+          <Link to="/attendance" className="text-sm text-primary-600 hover:text-primary-700 flex items-center">
+            详情<ArrowRight className="w-4 h-4 ml-1" />
           </Link>
         </div>
         <div className="card-body">
@@ -354,27 +273,21 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Semester Schedule Grid */}
-      {semester && (
-        <div className="card">
-          <div className="card-header flex items-center justify-between">
-            <h2 className="text-lg font-medium text-gray-900">
-              {semester.name} 排练总览
-            </h2>
-            <Link
-              to="/admin/schedule"
-              className="text-sm text-primary-600 hover:text-primary-700 flex items-center"
-            >
-              查看详情
-              <ArrowRight className="w-4 h-4 ml-1" />
-            </Link>
-          </div>
-          <div className="card-body p-0">
-            <SemesterScheduleGrid
-              semester={semester}
-              rehearsals={semRehearsals}
-            />
-          </div>
+      {/* Per-program member attendance breakdown */}
+      {canManagePrograms && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-medium text-gray-900">
+            {user?.role === 'program_manager' ? '我负责的剧目' : '剧目考勤明细'}
+          </h2>
+          {managedPrograms.length === 0 ? (
+            <div className="card">
+              <div className="card-body text-center py-8 text-gray-500">
+                {user?.role === 'program_manager' ? '尚未分配负责的剧目' : '本学期暂无活跃剧目'}
+              </div>
+            </div>
+          ) : (
+            managedPrograms.map((p) => <ManagedProgramCard key={p.program_id} program={p} />)
+          )}
         </div>
       )}
     </div>

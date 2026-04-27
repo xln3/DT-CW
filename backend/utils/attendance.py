@@ -50,3 +50,14 @@ VALID_STATUSES = [
     'leave_late',
     'leave_early',
 ]
+
+
+# Programs whose attendance is reported as a cumulative count of attended
+# sessions instead of a percentage. These are open-training-style programs
+# where the goal is encouragement to come, not perfect attendance.
+CUMULATIVE_PROGRAMS = {'芭蕾基训'}
+
+
+def attendance_mode_for(program_name: str) -> str:
+    """Return 'cumulative' or 'rate' depending on the program."""
+    return 'cumulative' if program_name in CUMULATIVE_PROGRAMS else 'rate'

@@ -471,6 +471,27 @@ export const rehearsalsApi = {
 };
 
 // Dashboard API
+export interface ManagedProgramAttendance {
+  program_id: number;
+  program_name: string;
+  attendance_mode: 'rate' | 'cumulative';
+  total_rehearsals: number;
+  member_count: number;
+  members: {
+    member_id: number;
+    member_name: string;
+    is_leader: boolean;
+    total_rehearsals: number;
+    attended_count: number;
+    normal_count: number;
+    late_count: number;
+    early_leave_count: number;
+    absent_count: number;
+    leave_count: number;
+    attendance_rate: number;
+  }[];
+}
+
 export const dashboardApi = {
   getStats: async () => {
     const response = await api.get<{
@@ -495,6 +516,16 @@ export const dashboardApi = {
         rehearsal_count: number;
       }[];
     }>('/admin/dashboard/stats');
+    return response.data;
+  },
+
+  getManagedProgramsAttendance: async (semesterId?: number) => {
+    const response = await api.get<{
+      programs: ManagedProgramAttendance[];
+      semester_id: number | null;
+    }>('/admin/dashboard/managed-programs-attendance', {
+      params: { semester_id: semesterId },
+    });
     return response.data;
   },
 };
