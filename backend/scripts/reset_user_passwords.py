@@ -1,67 +1,48 @@
-"""Reset member-user passwords to the last 6 characters of their student_id.
+"""Reset all user passwords via raw SQL UPDATE.
 
-Why:
-  Production users were imported with hard-coded defaults like '123456' or
-  '202601'. We want each member to log in with the last 6 of their own
-  student_id (most teams already remember this; nothing to memorise).
+NOTE on history: an earlier ORM version of this script (User.set_password +
+db.session.commit() in a loop) silently dropped most rows on commit — only 3
+of 144 updates were actually written by Postgres, with no error raised. Root
+cause was not pinned down. This script bypasses SQLAlchemy entirely:
 
-Behaviour:
-  * dry-run by default — prints the plan without writing
-  * --commit actually writes the new bcrypt hashes
-  * --admin-password <pwd> also resets the single admin account
-  * users with no member_id, no student_id, or short student_id are SKIPPED
-    and reported (your original instruction was: report them, you handle one
-    by one)
-  * a single AuditLog entry is written summarising the bulk action
-
-Output is intentionally verbose: every skip prints a reason, every plan can be
-sampled, and password-collision groups (where many users will share the same
-last-6) are listed as INFO (not a security issue, just so you know).
+  * one psycopg2 connection
+  * one transaction
+  * one explicit UPDATE per user
+  * commit at the end, or rollback on any error
+  * post-commit verification by counting fresh updated_at timestamps
 
 Usage:
-    cd backend
     python -m scripts.reset_user_passwords                            # dry-run
-    python -m scripts.reset_user_passwords --commit                    # apply
+    python -m scripts.reset_user_passwords --commit
     python -m scripts.reset_user_passwords --commit --admin-password 'xxx'
+
+The DATABASE_URL env var (or --db-url) drives the connection.
 """
 from __future__ import annotations
 
 import argparse
+import os
 import sys
-from collections import Counter
-from pathlib import Path
+from urllib.parse import urlparse
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from app import create_app
-from database import db
-from models import AuditLog, Member, User
+import bcrypt
+import psycopg2
 
 
-def _build_plan(users):
-    plans = []
-    skipped = []
-    admin_user = None
-    for u in users:
-        if u.role == User.ROLE_ADMIN:
-            admin_user = u
-            continue
-        if not u.member_id:
-            skipped.append((u, "no member_id linked"))
-            continue
-        member = Member.query.get(u.member_id)
-        if not member:
-            skipped.append((u, f"member_id={u.member_id} not found"))
-            continue
-        sid = (member.student_id or "").strip()
-        if not sid:
-            skipped.append((u, "member has no student_id"))
-            continue
-        if len(sid) < 6:
-            skipped.append((u, f"student_id too short: {sid!r}"))
-            continue
-        plans.append((u, member, sid, sid[-6:]))
-    return plans, skipped, admin_user
+def _parse_db_url(url: str):
+    """Convert postgresql://user:pwd@host:port/db to psycopg2 kwargs."""
+    p = urlparse(url)
+    return dict(
+        host=p.hostname or "127.0.0.1",
+        port=p.port or 5432,
+        user=p.username,
+        password=p.password,
+        dbname=p.path.lstrip("/"),
+    )
+
+
+def _hash(pw: str) -> str:
+    return bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def main() -> int:
@@ -70,81 +51,102 @@ def main() -> int:
                     help="actually write changes (default: dry-run)")
     ap.add_argument("--admin-password",
                     help="if given, also reset the admin user password")
+    ap.add_argument("--db-url", default=os.environ.get("DATABASE_URL", ""),
+                    help="postgresql://... (or read from DATABASE_URL)")
     args = ap.parse_args()
 
-    app = create_app()
-    with app.app_context():
-        users = User.query.order_by(User.id).all()
-        plans, skipped, admin_user = _build_plan(users)
+    if not args.db_url or not args.db_url.startswith("postgresql"):
+        print("ERROR: --db-url not given and DATABASE_URL not set or not Postgres")
+        return 1
 
-        print("== plan ==")
-        print(f"  total users:        {len(users)}")
-        print(f"  reset-to-last-6:    {len(plans)}")
-        print(f"  skipped:            {len(skipped)}")
-        print(f"  admin (separate):   {1 if admin_user else 0}")
-        print()
+    conn = psycopg2.connect(**_parse_db_url(args.db_url))
+    conn.autocommit = False
 
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT u.id, u.username, u.role, m.student_id
+                  FROM users u
+             LEFT JOIN members m ON u.member_id = m.id
+              ORDER BY u.id
+            """)
+            rows = cur.fetchall()
+
+        plans = []        # (user_id, username, new_password)
+        skipped = []      # (user_id, username, role, reason)
+        admin_user_id = None
+        for uid, username, role, sid in rows:
+            if role == "admin":
+                admin_user_id = (uid, username)
+                continue
+            sid = (sid or "").strip()
+            if not sid:
+                skipped.append((uid, username, role, "no student_id"))
+                continue
+            if len(sid) < 6:
+                skipped.append((uid, username, role, f"student_id too short: {sid!r}"))
+                continue
+            plans.append((uid, username, sid[-6:]))
+
+        print(f"== plan ==")
+        print(f"  total users:     {len(rows)}")
+        print(f"  reset-to-last-6: {len(plans)}")
+        print(f"  skipped:         {len(skipped)}")
+        print(f"  admin separate:  {1 if admin_user_id else 0}")
         if skipped:
-            print("== skipped users ==")
-            for u, reason in skipped:
-                print(f"  user#{u.id:>3d}  {u.username!r:25s}  role={u.role:18s}  "
-                      f"reason={reason}")
             print()
-
-        # Surface duplicate last-6 groups so you know that e.g. '010917' is
-        # shared by several students. Not a security problem — username is the
-        # discriminator at login — but worth flagging.
-        c = Counter(np for _, _, _, np in plans)
-        dups = sorted(((p, n) for p, n in c.items() if n > 1),
-                      key=lambda x: -x[1])
-        if dups:
-            print("== INFO: shared last-6 groups ==")
-            for p, n in dups[:10]:
-                names = [u.username for u, _, _, np in plans if np == p]
-                print(f"  {p!r}: {n} users  ({', '.join(names[:5])}"
-                      f"{' ...' if n > 5 else ''})")
-            print()
-
+            print("== skipped ==")
+            for uid, un, role, reason in skipped:
+                print(f"  user#{uid}  {un!r:25s}  role={role:18s}  {reason}")
         if not args.commit:
-            print("== sample (first 10 of plan) ==")
-            for u, m, sid, np in plans[:10]:
-                print(f"  {u.username!r:25s}  student_id={sid:12s}  "
-                      f"password→ {np}")
             print()
-            print("DRY RUN — no changes written. Add --commit to apply.")
+            print("DRY RUN — add --commit to apply.")
             return 0
 
-        for u, _, _, np in plans:
-            u.set_password(np)
+        with conn.cursor() as cur:
+            for uid, username, np in plans:
+                cur.execute(
+                    "UPDATE users SET password_hash = %s, updated_at = NOW() "
+                    "WHERE id = %s",
+                    (_hash(np), uid),
+                )
+            if args.admin_password and admin_user_id:
+                cur.execute(
+                    "UPDATE users SET password_hash = %s, updated_at = NOW() "
+                    "WHERE id = %s",
+                    (_hash(args.admin_password), admin_user_id[0]),
+                )
+            # audit
+            import json
+            cur.execute(
+                "INSERT INTO audit_logs (action, module, resource_type, details, created_at) "
+                "VALUES (%s, %s, %s, %s, NOW())",
+                ("update", "auth", "bulk_password_reset",
+                 json.dumps({
+                     "reset_count": len(plans),
+                     "skipped_count": len(skipped),
+                     "skipped_usernames": [u for _, u, _, _ in skipped],
+                     "admin_reset": bool(args.admin_password),
+                     "method": "raw_sql_bypass_orm",
+                 }, ensure_ascii=False)),
+            )
+        conn.commit()
+        print(f"\nCOMMITTED via raw SQL: {len(plans)} users"
+              + (f" + admin {admin_user_id[1]!r}" if args.admin_password and admin_user_id else "")
+              + f"; {len(skipped)} skipped.")
 
-        admin_done = False
-        if args.admin_password:
-            if not admin_user:
-                print("WARN: --admin-password given but no admin user found")
-            else:
-                admin_user.set_password(args.admin_password)
-                admin_done = True
-
-        db.session.commit()
-
-        AuditLog.log(
-            action=AuditLog.ACTION_UPDATE,
-            user=None,
-            module="auth",
-            resource_type="bulk_password_reset",
-            details={
-                "reset_count": len(plans),
-                "skipped_count": len(skipped),
-                "skipped_usernames": [u.username for u, _ in skipped],
-                "admin_reset": admin_done,
-            },
-            ip_address=None,
-        )
-
-        print(f"COMMITTED: {len(plans)} users reset"
-              + (f" + admin {admin_user.username!r}" if admin_done else "")
-              + f"; {len(skipped)} skipped (see list above).")
+        # Post-commit verification
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM users WHERE updated_at > NOW() - INTERVAL '5 minutes'")
+            n = cur.fetchone()[0]
+            print(f"verify: {n} rows have updated_at within last 5 minutes")
         return 0
+    except Exception as e:
+        conn.rollback()
+        print(f"ROLLED BACK due to: {e!r}")
+        return 2
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":
