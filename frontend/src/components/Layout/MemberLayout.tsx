@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import {
   Menu,
   X,
-  Home,
   Music,
   ClipboardCheck,
   User,
@@ -21,19 +20,14 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    name: '首页',
+    name: '我的考勤',
     path: '/member',
-    icon: <Home className="w-5 h-5" />,
+    icon: <ClipboardCheck className="w-5 h-5" />,
   },
   {
     name: '我的节目',
     path: '/member/programs',
     icon: <Music className="w-5 h-5" />,
-  },
-  {
-    name: '我的考勤',
-    path: '/member/attendance',
-    icon: <ClipboardCheck className="w-5 h-5" />,
   },
   {
     name: '个人设置',

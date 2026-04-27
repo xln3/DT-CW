@@ -10,7 +10,7 @@ import PublicLayout from './components/Layout/PublicLayout';
 // Pages
 import Login from './pages/Login';
 import Dashboard from './pages/admin/Dashboard';
-import { MemberDashboard, MyPrograms, MyProgramDetail, MyAttendance, MyProfile } from './pages/member';
+import { MyPrograms, MyProgramDetail, MyAttendance, MyProfile } from './pages/member';
 import { MemberList, MemberForm } from './pages/admin/members';
 import { TeacherList, TeacherForm, TeacherApplications, TeacherPayments } from './pages/admin/teachers';
 import { ProgramList, ProgramForm, ProgramDetail } from './pages/admin/programs';
@@ -115,10 +115,10 @@ function App() {
             {/* Protected member routes */}
             <Route element={<MemberRoute />}>
               <Route element={<MemberLayout />}>
-                <Route path="/member" element={<MemberDashboard />} />
+                <Route path="/member" element={<MyAttendance />} />
+                <Route path="/member/attendance" element={<Navigate to="/member" replace />} />
                 <Route path="/member/programs" element={<MyPrograms />} />
                 <Route path="/member/programs/:id" element={<MyProgramDetail />} />
-                <Route path="/member/attendance" element={<MyAttendance />} />
                 <Route path="/member/profile" element={<MyProfile />} />
               </Route>
             </Route>
