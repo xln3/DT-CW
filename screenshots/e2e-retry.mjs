@@ -31,17 +31,23 @@ for (const u of retryUsers) {
       await page.locator('button[type="submit"]').click();
       await navPromise;
       const finalUrl = page.url();
+      let contentReady = false;
       if (finalUrl.includes('/member')) {
-        await page.waitForSelector('[data-testid="my-attendance-loaded"]', { timeout: 15000 }).catch(() => null);
+        contentReady = await page.waitForSelector('[data-testid="my-attendance-loaded"]', { timeout: 25000 })
+          .then(() => true).catch(() => false);
       } else if (finalUrl.includes('/admin')) {
-        await page.waitForSelector('h1, h2', { timeout: 15000 }).catch(() => null);
+        contentReady = await page.waitForSelector('h1, h2', { timeout: 25000 })
+          .then(() => true).catch(() => false);
       }
-      await page.waitForFunction(
+      const spinnerGone = await page.waitForFunction(
         () => document.querySelectorAll('.animate-spin').length === 0,
-        { timeout: 10000 },
-      ).catch(() => null);
-      await new Promise(r => setTimeout(r, 400));
-      const ok = !finalUrl.endsWith('/login') && (finalUrl.includes('/admin') || finalUrl.includes('/member'));
+        { timeout: 18000 },
+      ).then(() => true).catch(() => false);
+      await new Promise(r => setTimeout(r, 250));
+      const ok = !finalUrl.endsWith('/login')
+        && (finalUrl.includes('/admin') || finalUrl.includes('/member'))
+        && contentReady
+        && spinnerGone;
       const safeName = `${String(u.id).padStart(3, '0')}-${u.username.replace(/[\/\\:*?"<>|]/g, '_')}`;
       await page.screenshot({ path: path.join(DIR, `${safeName}.png`), fullPage: false });
       if (ok) {

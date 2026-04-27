@@ -42,9 +42,16 @@ export default function MyAttendance() {
         const current = semesterList.find((s) => s.is_current);
         if (current) {
           setSelectedSemester(current.id);
+        } else if (semesterList.length > 0) {
+          // No current semester flagged — fall back to the most recent.
+          setSelectedSemester(semesterList[0].id);
+        } else {
+          // Empty list: nothing to query, end loading.
+          setIsLoading(false);
         }
       } catch (err) {
         console.error('Failed to fetch semesters:', err);
+        setIsLoading(false);
       }
     };
 
@@ -52,6 +59,12 @@ export default function MyAttendance() {
   }, []);
 
   useEffect(() => {
+    // Wait until we know which semester to query so we don't fire two
+    // fetches (one with undefined, then one when the current semester is
+    // resolved). The double-fetch caused the page to flash a spinner mid-load
+    // and screenshot tooling kept catching the spinner state.
+    if (selectedSemester === undefined) return;
+
     const fetchAttendance = async () => {
       setIsLoading(true);
       try {

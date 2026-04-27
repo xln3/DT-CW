@@ -79,24 +79,24 @@ async function tryLogin(user) {
     await navPromise;
     const finalUrl = page.url();
 
-    // Wait for actual page content, not just network idle. Different roles
-    // land on different routes — match the data-testid we placed on each
-    // top-level page wrapper. Falls through after timeout (still screenshots).
+    // Strict content-readiness check: a screenshot should never be a spinner.
+    // For /member we require the testid AND zero spinners. For /admin we
+    // require a heading AND zero spinners. If either condition fails to be
+    // met within the timeout, mark the run as FAIL — let retry handle it.
+    let contentReady = false;
     if (finalUrl.includes('/member')) {
-      await page.waitForSelector('[data-testid="my-attendance-loaded"]', {
-        timeout: 15000,
-      }).catch(() => null);
+      contentReady = await page.waitForSelector('[data-testid="my-attendance-loaded"]', {
+        timeout: 18000,
+      }).then(() => true).catch(() => false);
     } else if (finalUrl.includes('/admin')) {
-      // Admin dashboard: wait for any heading to render
-      await page.waitForSelector('h1, h2', { timeout: 15000 }).catch(() => null);
+      contentReady = await page.waitForSelector('h1, h2', { timeout: 18000 })
+        .then(() => true).catch(() => false);
     }
-    // After the page wrapper renders, the inner attendance fetch may still
-    // be in flight. Wait for any remaining spinner to leave.
-    await page.waitForFunction(
+    const spinnerGone = await page.waitForFunction(
       () => document.querySelectorAll('.animate-spin').length === 0,
-      { timeout: 10000 },
-    ).catch(() => null);
-    await new Promise(r => setTimeout(r, 400));
+      { timeout: 12000 },
+    ).then(() => true).catch(() => false);
+    await new Promise(r => setTimeout(r, 250));
 
     const isLoggedIn = !finalUrl.endsWith('/login') &&
       (finalUrl.includes('/admin') || finalUrl.includes('/member'));
@@ -108,9 +108,14 @@ async function tryLogin(user) {
 
     completed++;
     const ms = Date.now() - t0;
-    if (isLoggedIn) {
+    if (isLoggedIn && contentReady && spinnerGone) {
       console.log(`  [${completed}/${users.length}] ✓ ${user.username} (${user.password}) → ${finalUrl}  ${ms}ms`);
       results.push({ ...user, status: 'PASS', reason: finalUrl, durationMs: ms });
+    } else if (isLoggedIn) {
+      // Logged in but page didn't finish rendering — let retry pick it up.
+      const why = !contentReady ? 'content not ready' : 'spinner stuck';
+      console.log(`  [${completed}/${users.length}] ⚠ ${user.username} (${user.password}) → ${finalUrl}  ${why}`);
+      results.push({ ...user, status: 'FAIL', reason: `at ${finalUrl}: ${why}`, durationMs: ms });
     } else {
       // Try to extract the inline error message
       let errText = '';
