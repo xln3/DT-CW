@@ -1235,23 +1235,16 @@ export const memberPortalApi = {
       programs: {
         program_id: number;
         program_name: string;
+        attendance_mode: 'rate' | 'cumulative';
         total_rehearsals: number;
         normal_count: number;
         late_count: number;
         early_leave_count: number;
         absent_count: number;
         leave_count: number;
+        attended_count: number;
         attendance_rate: number;
       }[];
-      overall_stats: {
-        total_rehearsals: number;
-        normal_count: number;
-        late_count: number;
-        early_leave_count: number;
-        absent_count: number;
-        leave_count: number;
-        attendance_rate: number;
-      };
     }>('/member/my-attendance', {
       params: { semester_id: semesterId },
     });

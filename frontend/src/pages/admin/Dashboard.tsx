@@ -1,9 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Check,
-  Clock,
-  X,
   ClipboardCheck,
   ArrowRight,
 } from 'lucide-react';
@@ -70,26 +67,19 @@ function shortTime(time: string): string {
 interface ProgramAttendance {
   program_id: number;
   program_name: string;
+  attendance_mode: 'rate' | 'cumulative';
   total_rehearsals: number;
   normal_count: number;
   late_count: number;
   early_leave_count: number;
   absent_count: number;
   leave_count: number;
+  attended_count: number;
   attendance_rate: number;
 }
 
 interface PersonalAttendanceData {
   programs: ProgramAttendance[];
-  overall_stats: {
-    total_rehearsals: number;
-    normal_count: number;
-    late_count: number;
-    early_leave_count: number;
-    absent_count: number;
-    leave_count: number;
-    attendance_rate: number;
-  };
 }
 
 function getRateColor(rate: number) {
@@ -99,59 +89,29 @@ function getRateColor(rate: number) {
 }
 
 function PersonalAttendanceCard({ data }: { data: PersonalAttendanceData }) {
-  const stats = data.overall_stats;
-
+  if (data.programs.length === 0) {
+    return <p className="text-gray-500 text-center py-4">本学期暂无考勤数据</p>;
+  }
   return (
-    <div className="space-y-4">
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="card">
-          <div className="card-body py-3 text-center">
-            <div className={`text-2xl font-bold ${getRateColor(stats.attendance_rate)}`}>
-              {stats.attendance_rate}%
-            </div>
-            <div className="text-xs text-gray-500 mt-1">总出勤率</div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="card-body py-3 text-center">
-            <div className="flex items-center justify-center">
-              <Check className="w-4 h-4 text-green-600 mr-1" />
-              <span className="text-xl font-bold text-gray-900">{stats.normal_count}</span>
-            </div>
-            <div className="text-xs text-gray-500 mt-1">正常</div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="card-body py-3 text-center">
-            <div className="flex items-center justify-center">
-              <Clock className="w-4 h-4 text-yellow-600 mr-1" />
-              <span className="text-xl font-bold text-gray-900">{stats.late_count + (stats.early_leave_count || 0)}</span>
-            </div>
-            <div className="text-xs text-gray-500 mt-1">迟到/早退</div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="card-body py-3 text-center">
-            <div className="flex items-center justify-center">
-              <X className="w-4 h-4 text-red-600 mr-1" />
-              <span className="text-xl font-bold text-gray-900">{stats.absent_count}</span>
-            </div>
-            <div className="text-xs text-gray-500 mt-1">缺勤</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Program breakdown */}
-      {data.programs.length > 0 && (
-        <div className="space-y-2">
-          {data.programs.map((prog) => (
-            <div key={prog.program_id} className="flex items-center gap-3">
-              <span className="text-sm text-gray-700 w-24 truncate flex-shrink-0">{prog.program_name}</span>
+    <div className="space-y-2">
+      {data.programs.map((prog) => (
+        <div key={prog.program_id} className="flex items-center gap-3">
+          <span className="text-sm text-gray-700 w-24 truncate flex-shrink-0">{prog.program_name}</span>
+          {prog.attendance_mode === 'cumulative' ? (
+            <span className="flex-1 text-sm text-purple-700">
+              已累计参加 <span className="font-semibold">{prog.attended_count}</span> 次
+              <span className="text-gray-400"> / 共 {prog.total_rehearsals} 次</span>
+            </span>
+          ) : (
+            <>
               <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div
                   className={`h-full ${
-                    prog.attendance_rate >= 90 ? 'bg-green-500' : prog.attendance_rate >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                    prog.attendance_rate >= 90
+                      ? 'bg-green-500'
+                      : prog.attendance_rate >= 70
+                      ? 'bg-yellow-500'
+                      : 'bg-red-500'
                   }`}
                   style={{ width: `${prog.attendance_rate}%` }}
                 />
@@ -159,10 +119,10 @@ function PersonalAttendanceCard({ data }: { data: PersonalAttendanceData }) {
               <span className={`text-sm font-medium w-12 text-right ${getRateColor(prog.attendance_rate)}`}>
                 {prog.attendance_rate}%
               </span>
-            </div>
-          ))}
+            </>
+          )}
         </div>
-      )}
+      ))}
     </div>
   );
 }
