@@ -10,6 +10,7 @@ import {
   Upload,
   Download,
   XCircle,
+  CalendarOff,
 } from 'lucide-react';
 import { venuesApi, rehearsalsApi, semestersApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -490,6 +491,53 @@ export default function RehearsalHall() {
   >([]);
   const [isSavingTimeSlots, setIsSavingTimeSlots] = useState(false);
 
+  // Batch cancel (for holidays / 放假)
+  const [batchCancelOpen, setBatchCancelOpen] = useState(false);
+  const [batchCancelReason, setBatchCancelReason] = useState('');
+  const [batchCanceling, setBatchCanceling] = useState(false);
+  const [batchCancelResult, setBatchCancelResult] = useState<{ count: number } | null>(null);
+
+  const currentRange = useMemo(() => {
+    if (viewMode === 'week') {
+      const start = weekStart;
+      const e = dateFromStr(weekStart);
+      e.setDate(e.getDate() + 6);
+      return { from: start, to: toDateStr(e) };
+    }
+    if (viewMode === 'month') {
+      const calDays = getMonthCalendarDates(monthDate.year, monthDate.month);
+      return { from: calDays[0].dateStr, to: calDays[calDays.length - 1].dateStr };
+    }
+    if (semester) {
+      return { from: semester.start_date, to: semester.end_date };
+    }
+    return null;
+  }, [viewMode, weekStart, monthDate.year, monthDate.month, semester]);
+
+  const handleBatchCancel = async () => {
+    if (!currentRange) return;
+    setBatchCanceling(true);
+    setError('');
+    try {
+      const res = await rehearsalsApi.batchCancel({
+        date_from: currentRange.from,
+        date_to: currentRange.to,
+        program_ids: programFilter ? [programFilter as number] : undefined,
+        reason: batchCancelReason.trim() || undefined,
+        exclude_from_attendance: true,
+      });
+      setBatchCancelResult({ count: res.cancelled_count });
+      setBatchCancelOpen(false);
+      setBatchCancelReason('');
+      setRefreshKey((k) => k + 1);
+      await queryClient.invalidateQueries({ queryKey: rehearsalKeys.lists() });
+    } catch (err: any) {
+      setError(err.response?.data?.error || '批量取消失败');
+    } finally {
+      setBatchCanceling(false);
+    }
+  };
+
   // Derived
   const weekDates = useMemo(() => getWeekDateStrs(weekStart), [weekStart]);
 
@@ -753,6 +801,15 @@ export default function RehearsalHall() {
               >
                 <Upload className="w-4 h-4" />
               </button>
+              <button
+                onClick={() => setBatchCancelOpen((v) => !v)}
+                className="px-2 py-1 text-sm border border-yellow-300 text-yellow-700 rounded hover:bg-yellow-50 inline-flex items-center"
+                title="按当前视图日期范围批量取消排练（节假日/放假）"
+                disabled={!currentRange}
+              >
+                <CalendarOff className="w-4 h-4 mr-1" />
+                批量取消
+              </button>
               <Link to="/admin/rehearsals/new" className="btn-primary py-1 text-sm">
                 <Plus className="w-4 h-4 mr-1" />
                 创建排练
@@ -773,6 +830,55 @@ export default function RehearsalHall() {
         <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-start">
           <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />
           <span className="text-sm text-red-700">{error}</span>
+        </div>
+      )}
+
+      {/* Batch cancel panel */}
+      {batchCancelOpen && currentRange && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+          <div className="text-sm text-gray-700 mb-3">
+            将取消 <span className="font-semibold">{currentRange.from}</span> 至{' '}
+            <span className="font-semibold">{currentRange.to}</span>
+            {programFilter
+              ? ` 内节目「${programs.find((p) => p.id === programFilter)?.name ?? ''}」的全部未取消排练。`
+              : ' 内全部未取消排练（所有节目）。'}
+            取消后将自动释放关联场地并从考勤率中排除。
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              className="form-input flex-1"
+              placeholder="取消原因（如：五一假期、校庆活动）"
+              value={batchCancelReason}
+              onChange={(e) => setBatchCancelReason(e.target.value)}
+              maxLength={100}
+            />
+            <button
+              onClick={handleBatchCancel}
+              disabled={batchCanceling}
+              className="px-4 py-2 text-sm bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50"
+            >
+              {batchCanceling ? '取消中…' : '确认批量取消'}
+            </button>
+            <button
+              onClick={() => { setBatchCancelOpen(false); setBatchCancelReason(''); }}
+              className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Batch cancel result */}
+      {batchCancelResult && (
+        <div className="bg-green-50 border border-green-200 rounded-md p-4 flex items-start justify-between">
+          <p className="text-sm text-green-700">
+            已批量取消 {batchCancelResult.count} 条排练。
+          </p>
+          <button onClick={() => setBatchCancelResult(null)} className="text-gray-400 hover:text-gray-600">
+            <XCircle className="w-5 h-5" />
+          </button>
         </div>
       )}
 

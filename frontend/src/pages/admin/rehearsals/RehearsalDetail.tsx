@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Edit2, AlertCircle, FileText } from 'lucide-react';
+import { ArrowLeft, Edit2, AlertCircle, FileText, XCircle, Trash2 } from 'lucide-react';
 import { rehearsalsApi, faceRecognitionApi, programsApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { Rehearsal, Attendance, FaceMatchStatus } from '../../../types';
@@ -40,6 +40,38 @@ export default function RehearsalDetail() {
   const [programMembers, setProgramMembers] = useState<{ id: number; name: string }[]>([]);
   const [pendingAnnotations, setPendingAnnotations] = useState<PendingAnnotation[]>([]);
   const [isSubmittingAnnotations, setIsSubmittingAnnotations] = useState(false);
+
+  const [cancelConfirm, setCancelConfirm] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [isMutating, setIsMutating] = useState(false);
+
+  const handleCancelRehearsal = async () => {
+    if (!rehearsal) return;
+    setIsMutating(true);
+    setError('');
+    try {
+      const updated = await rehearsalsApi.update(rehearsal.id, { status: 'cancelled' });
+      setRehearsal(updated);
+      setCancelConfirm(false);
+    } catch (err: any) {
+      setError(err.response?.data?.error || '取消失败');
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleDeleteRehearsal = async () => {
+    if (!rehearsal) return;
+    setIsMutating(true);
+    setError('');
+    try {
+      await rehearsalsApi.delete(rehearsal.id);
+      navigate('/admin/rehearsals');
+    } catch (err: any) {
+      setError(err.response?.data?.error || '删除失败');
+      setIsMutating(false);
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -289,10 +321,72 @@ export default function RehearsalDetail() {
           </div>
         </div>
         {canEdit && (
-          <Link to={`/admin/rehearsals/${id}/edit`} className="btn-primary self-start sm:self-auto">
-            <Edit2 className="w-4 h-4 mr-2" />
-            编辑
-          </Link>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {rehearsal.status !== 'cancelled' && (
+              <Link
+                to={`/admin/rehearsals/${id}/edit`}
+                className="btn-primary"
+                title="编辑"
+              >
+                <Edit2 className="w-4 h-4 mr-2" />
+                编辑
+              </Link>
+            )}
+            {rehearsal.status !== 'cancelled' && (
+              cancelConfirm ? (
+                <>
+                  <button
+                    onClick={handleCancelRehearsal}
+                    disabled={isMutating}
+                    className="px-3 py-2 text-sm bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50"
+                  >
+                    {isMutating ? '取消中…' : '确认取消'}
+                  </button>
+                  <button
+                    onClick={() => setCancelConfirm(false)}
+                    className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                  >
+                    返回
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => { setCancelConfirm(true); setDeleteConfirm(false); }}
+                  className="px-3 py-2 text-sm border border-yellow-300 text-yellow-700 rounded hover:bg-yellow-50 inline-flex items-center"
+                  title="取消排练（保留记录，从考勤率中排除）"
+                >
+                  <XCircle className="w-4 h-4 mr-1" />
+                  取消排练
+                </button>
+              )
+            )}
+            {deleteConfirm ? (
+              <>
+                <button
+                  onClick={handleDeleteRehearsal}
+                  disabled={isMutating}
+                  className="px-3 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                >
+                  {isMutating ? '删除中…' : '确认删除'}
+                </button>
+                <button
+                  onClick={() => setDeleteConfirm(false)}
+                  className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                >
+                  返回
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => { setDeleteConfirm(true); setCancelConfirm(false); }}
+                className="px-3 py-2 text-sm border border-red-300 text-red-700 rounded hover:bg-red-50 inline-flex items-center"
+                title="删除排练（不可恢复，含考勤、人脸识别记录）"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                删除
+              </button>
+            )}
+          </div>
         )}
       </div>
 
