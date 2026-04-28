@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ClipboardCheck, ArrowRight, Users } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { dashboardApi, memberPortalApi, publicApi } from '../../services/api';
+import { dashboardApi, memberPortalApi } from '../../services/api';
 import type { ManagedProgramAttendance, RehearsalSlotDTO } from '../../services/api';
 import {
   AttendanceTimeline,
@@ -48,53 +48,6 @@ function PersonalAttendanceCard({ data }: { data: PersonalAttendanceData }) {
   );
 }
 
-// --- Team Overview (admin without member_id; uses the public-page % data) ---
-
-interface TeamProgramOverview {
-  id: number;
-  name: string;
-  member_count: number;
-  rehearsal_count: number;
-  counted_rehearsal_count: number;
-  attendance_rate: number;
-}
-
-function getRateColor(rate: number) {
-  if (rate >= 90) return 'text-green-600';
-  if (rate >= 70) return 'text-yellow-600';
-  return 'text-red-600';
-}
-
-function getRateBarColor(rate: number) {
-  if (rate >= 90) return 'bg-green-500';
-  if (rate >= 70) return 'bg-yellow-500';
-  return 'bg-red-500';
-}
-
-function TeamAttendanceCard({ programs }: { programs: TeamProgramOverview[] }) {
-  if (programs.length === 0) {
-    return <p className="text-gray-500 text-center py-4">暂无节目数据</p>;
-  }
-  return (
-    <div className="space-y-2">
-      {programs.map((prog) => (
-        <div key={prog.id} className="flex items-center gap-3">
-          <span className="text-sm text-gray-700 w-24 truncate flex-shrink-0">{prog.name}</span>
-          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div className={`h-full ${getRateBarColor(prog.attendance_rate)}`} style={{ width: `${prog.attendance_rate}%` }} />
-          </div>
-          <span className={`text-sm font-medium w-12 text-right ${getRateColor(prog.attendance_rate)}`}>
-            {prog.attendance_rate}%
-          </span>
-          <span className="text-xs text-gray-400 w-16 text-right flex-shrink-0">
-            {prog.counted_rehearsal_count}次排练
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // --- Managed-programs attendance (per-member timeline grid) ---
 
 function ManagedProgramCard({ program }: { program: ManagedProgramAttendance }) {
@@ -135,15 +88,21 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [personalData, setPersonalData] = useState<PersonalAttendanceData | null>(null);
-  const [teamPrograms, setTeamPrograms] = useState<TeamProgramOverview[]>([]);
   const [managedPrograms, setManagedPrograms] = useState<ManagedProgramAttendance[]>([]);
 
   const hasMemberId = !!user?.member_id;
-  // Anyone with admin-side access (admin / committee / program_manager) sees
-  // the per-member breakdown of programs they can manage. Members never reach
-  // this page (they're routed to /member).
+  // Admin / committee / program_manager all see the per-member timeline
+  // breakdown. Members never reach this page (they go to /member).
   const canManagePrograms = !!user
     && (user.role === 'admin' || user.role === 'committee' || user.role === 'program_manager');
+
+  // Pick a section heading appropriate for the user's role. For admin /
+  // committee without a linked member this is the only block on the page,
+  // so the heading carries more weight.
+  const managedHeading =
+    user?.role === 'program_manager' ? '我负责的剧目'
+    : hasMemberId ? '剧目考勤明细'
+    : '全队考勤';
 
   useEffect(() => {
     const load = async () => {
@@ -153,8 +112,6 @@ export default function Dashboard() {
 
         if (hasMemberId) {
           tasks.push(memberPortalApi.getMyAttendance().then((d) => setPersonalData(d)));
-        } else {
-          tasks.push(publicApi.getAttendanceOverview().then((d) => setTeamPrograms(d.programs || [])));
         }
 
         if (canManagePrograms) {
@@ -194,33 +151,27 @@ export default function Dashboard() {
         <p className="mt-1 text-sm text-gray-500">欢迎回来,{user?.display_name}!</p>
       </div>
 
-      {/* Personal / team attendance summary */}
-      <div className="card">
-        <div className="card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div className="flex items-center">
-            <ClipboardCheck className="w-5 h-5 mr-2 text-gray-400" />
-            <h2 className="text-lg font-medium text-gray-900">
-              {hasMemberId ? '我的考勤' : '全队考勤概览'}
-            </h2>
+      {/* Personal attendance — only when the user is also a member. */}
+      {hasMemberId && personalData && (
+        <div className="card">
+          <div className="card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="flex items-center">
+              <ClipboardCheck className="w-5 h-5 mr-2 text-gray-400" />
+              <h2 className="text-lg font-medium text-gray-900">我的考勤</h2>
+            </div>
+            <AttendanceLegend />
           </div>
-          {hasMemberId && <AttendanceLegend />}
-        </div>
-        <div className="card-body">
-          {hasMemberId && personalData ? (
+          <div className="card-body">
             <PersonalAttendanceCard data={personalData} />
-          ) : (
-            <TeamAttendanceCard programs={teamPrograms} />
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Per-program member attendance breakdown */}
+      {/* Per-program member attendance breakdown (timeline grid). */}
       {canManagePrograms && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <h2 className="text-lg font-medium text-gray-900">
-              {user?.role === 'program_manager' ? '我负责的剧目' : '剧目考勤明细'}
-            </h2>
+            <h2 className="text-lg font-medium text-gray-900">{managedHeading}</h2>
             <AttendanceLegend />
           </div>
           {managedPrograms.length === 0 ? (
