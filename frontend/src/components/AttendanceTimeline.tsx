@@ -54,6 +54,19 @@ export function AttendanceCell({
   rehearsal: RehearsalSlot;
 }) {
   const tip = rehearsalTooltip(rehearsal);
+  // Only show a status when the rehearsal has actually happened. The system
+  // pre-populates 'absent' records when rehearsals are created, so a future
+  // rehearsal can carry a status — but treating that as "缺勤" would be wrong.
+  if (!rehearsal.is_completed) {
+    return (
+      <div
+        className="w-6 h-6 rounded-sm border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-[10px] text-gray-300"
+        title={`${tip} — 未发生`}
+      >
+        ·
+      </div>
+    );
+  }
   if (status && STATUS_META[status]) {
     const meta = STATUS_META[status];
     return (
@@ -65,22 +78,12 @@ export function AttendanceCell({
       </div>
     );
   }
-  if (rehearsal.is_completed) {
-    return (
-      <div
-        className="w-6 h-6 rounded-sm bg-gray-200 flex items-center justify-center text-[10px] text-gray-400"
-        title={`${tip} — 未标记`}
-      >
-        ?
-      </div>
-    );
-  }
   return (
     <div
-      className="w-6 h-6 rounded-sm border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-[10px] text-gray-300"
-      title={`${tip} — 未发生`}
+      className="w-6 h-6 rounded-sm bg-gray-200 flex items-center justify-center text-[10px] text-gray-400"
+      title={`${tip} — 未标记`}
     >
-      ·
+      ?
     </div>
   );
 }
