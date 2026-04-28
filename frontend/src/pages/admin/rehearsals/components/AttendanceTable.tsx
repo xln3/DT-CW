@@ -3,6 +3,10 @@ import { Edit2 } from 'lucide-react';
 import type { Attendance, AttendanceStatus } from '../../../../types';
 import { getAttendanceStyles } from '../../../../utils/attendance';
 import { parseAttendanceSegments } from '../../../../utils/attendance';
+import {
+  PHYSICALLY_PRESENT_STATUSES,
+  NO_SHOW_STATUSES,
+} from '../../../../components/AttendanceTimeline';
 
 const SEGMENT_LABELS = { before: '课前' as const, middle: '中间' as const, after: '课后' as const };
 
@@ -273,42 +277,58 @@ export default function AttendanceTable({
     }
   };
 
+  // Stats grouped by physical presence (matches dashboard / program-detail).
+  // 出席 + 缺勤 = 应到. 请假 is a cross-cut tally (a present member with a
+  // partial leave is counted in both 出席 and 请假).
   const stats = {
     total: attendance.length,
-    normal: attendance.filter((a) => a.status === 'normal').length,
-    late: attendance.filter((a) => ['late', 'leave_late'].includes(a.status)).length,
-    absent: attendance.filter((a) =>
-      ['absent', 'early_leave', 'leave_absent', 'leave_early'].includes(a.status)
-    ).length,
+    attended: attendance.filter((a) => PHYSICALLY_PRESENT_STATUSES.has(a.status)).length,
+    absent: attendance.filter((a) => NO_SHOW_STATUSES.has(a.status)).length,
     leave: attendance.filter((a) => a.has_leave).length,
+    // Sub-breakdowns under each card.
+    normal: attendance.filter((a) => a.status === 'normal').length,
+    late: attendance.filter((a) => a.status === 'late').length,
+    earlyLeave: attendance.filter((a) => a.status === 'early_leave').length,
+    presentWithPartialLeave: attendance.filter(
+      (a) => a.status === 'leave_late' || a.status === 'leave_early',
+    ).length,
+    noShowPlain: attendance.filter((a) => a.status === 'absent').length,
+    noShowOnLeave: attendance.filter((a) => a.status === 'leave_absent').length,
   };
 
   return (
     <>
-      {/* Attendance Stats */}
+      {/* Attendance Stats — 4 cards with sub-breakdown. */}
       <div className="card">
         <div className="card-body">
           <h3 className="text-lg font-medium text-gray-900 mb-4">考勤统计</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-            <div className="text-center p-4 bg-gray-50 rounded-lg">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="p-4 bg-gray-50 rounded-lg text-center">
               <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
-              <p className="text-sm text-gray-500">应到人数</p>
+              <p className="text-sm text-gray-500 mt-1">应到人数</p>
+              <p className="text-xs text-gray-400 mt-2 invisible">·</p>
             </div>
-            <div className="text-center p-4 bg-green-50 rounded-lg">
-              <p className="text-3xl font-bold text-green-600">{stats.normal}</p>
-              <p className="text-sm text-gray-500">正常出勤</p>
+            <div className="p-4 bg-green-50 rounded-lg text-center">
+              <p className="text-3xl font-bold text-green-600">{stats.attended}</p>
+              <p className="text-sm text-gray-500 mt-1">出席</p>
+              <p className="text-xs text-gray-500 mt-2 leading-snug">
+                正常 {stats.normal} · 迟到 {stats.late} · 早退 {stats.earlyLeave}
+                {stats.presentWithPartialLeave > 0 && (
+                  <> · 含请假补全 {stats.presentWithPartialLeave}</>
+                )}
+              </p>
             </div>
-            <div className="text-center p-4 bg-yellow-50 rounded-lg">
-              <p className="text-3xl font-bold text-yellow-600">{stats.late}</p>
-              <p className="text-sm text-gray-500">迟到</p>
+            <div className="p-4 bg-orange-50 rounded-lg text-center">
+              <p className="text-3xl font-bold text-orange-600">{stats.absent}</p>
+              <p className="text-sm text-gray-500 mt-1">缺勤</p>
+              <p className="text-xs text-gray-500 mt-2 leading-snug">
+                未到 {stats.noShowPlain} · 全请假 {stats.noShowOnLeave}
+              </p>
             </div>
-            <div className="text-center p-4 bg-red-50 rounded-lg">
-              <p className="text-3xl font-bold text-red-600">{stats.absent}</p>
-              <p className="text-sm text-gray-500">缺勤/早退</p>
-            </div>
-            <div className="text-center p-4 bg-blue-50 rounded-lg">
+            <div className="p-4 bg-blue-50 rounded-lg text-center">
               <p className="text-3xl font-bold text-blue-600">{stats.leave}</p>
-              <p className="text-sm text-gray-500">请假</p>
+              <p className="text-sm text-gray-500 mt-1">请假</p>
+              <p className="text-xs text-gray-400 mt-2 leading-snug">跨"出席/缺勤"汇总</p>
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   Edit2,
@@ -51,8 +51,16 @@ interface LeftMemberData {
 export default function ProgramDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { hasRole } = useAuth();
   const canEdit = hasRole('admin', 'committee', 'program_manager');
+
+  // Smart back: prefer browser history, fall back to the program list when the
+  // user landed here from a direct URL (location.key === 'default').
+  const handleBack = () => {
+    if (location.key !== 'default') navigate(-1);
+    else navigate('/admin/programs');
+  };
 
   const [program, setProgram] = useState<Program | null>(null);
   const [programMembers, setProgramMembers] = useState<ProgramMemberData[]>([]);
@@ -286,8 +294,9 @@ export default function ProgramDetail() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center space-x-4">
           <button
-            onClick={() => navigate('/admin/programs')}
+            onClick={handleBack}
             className="p-2 text-gray-400 hover:text-gray-600"
+            title="返回"
           >
             <ArrowLeft className="w-6 h-6" />
           </button>

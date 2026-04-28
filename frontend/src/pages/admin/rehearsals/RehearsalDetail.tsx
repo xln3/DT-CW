@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { ArrowLeft, Edit2, AlertCircle, FileText, XCircle, Trash2 } from 'lucide-react';
 import { rehearsalsApi, faceRecognitionApi, programsApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -22,6 +22,7 @@ const EMPTY_RECOGNITION: RecognitionState = {
 export default function RehearsalDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { hasRole } = useAuth();
   const canEdit = hasRole('admin', 'committee', 'program_manager');
 
@@ -65,8 +66,9 @@ export default function RehearsalDetail() {
     setIsMutating(true);
     setError('');
     try {
+      const programId = rehearsal.program_id;
       await rehearsalsApi.delete(rehearsal.id);
-      navigate('/admin/rehearsals');
+      navigate(`/admin/programs/${programId}`);
     } catch (err: any) {
       setError(err.response?.data?.error || '删除失败');
       setIsMutating(false);
@@ -287,12 +289,23 @@ export default function RehearsalDetail() {
     );
   }
 
+  // Smart back: prefer browser history, fall back to the parent program detail
+  // (or dashboard when the rehearsal failed to load and we have no program id).
+  const handleBack = () => {
+    if (location.key !== 'default') {
+      navigate(-1);
+      return;
+    }
+    if (rehearsal?.program_id) navigate(`/admin/programs/${rehearsal.program_id}`);
+    else navigate('/admin');
+  };
+
   if (!rehearsal) {
     return (
       <div className="text-center py-12">
         <p className="text-gray-500">排练不存在或已被删除</p>
-        <button onClick={() => navigate('/admin/rehearsals')} className="mt-4 btn-primary">
-          返回排练列表
+        <button onClick={() => navigate('/admin')} className="mt-4 btn-primary">
+          返回仪表盘
         </button>
       </div>
     );
@@ -304,8 +317,9 @@ export default function RehearsalDetail() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center space-x-4">
           <button
-            onClick={() => navigate('/admin/rehearsals')}
+            onClick={handleBack}
             className="p-2 text-gray-400 hover:text-gray-600"
+            title="返回"
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
