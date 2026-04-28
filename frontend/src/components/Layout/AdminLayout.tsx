@@ -52,13 +52,13 @@ const navItems: NavItem[] = [
     name: '排练厅使用时间',
     path: '/admin/schedule',
     icon: <Calendar className="w-5 h-5" />,
-    roles: ['admin', 'committee', 'program_manager'],
+    roles: ['admin', 'committee'],
   },
   {
     name: '队历管理',
     path: '/admin/calendar',
     icon: <Calendar className="w-5 h-5" />,
-    roles: ['admin', 'committee', 'program_manager'],
+    roles: ['admin', 'committee'],
   },
   {
     name: '预算管理',
