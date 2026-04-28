@@ -26,7 +26,9 @@ import { exportAttendanceCsv } from '../../../utils/exportCsv';
 import {
   AttendanceCell,
   AttendanceLegend,
+  countAttendanceFromCellMap,
   type RehearsalSlot,
+  type AttendanceMode,
 } from '../../../components/AttendanceTimeline';
 
 type AttendanceData = AttendanceSegmentData;
@@ -82,6 +84,7 @@ export default function ProgramDetail() {
   const [attendanceMatrix, setAttendanceMatrix] = useState<
     Record<number, Record<number, AttendanceData | null>>
   >({});
+  const [attendanceMode, setAttendanceMode] = useState<AttendanceMode>('rate');
 
   useEffect(() => {
     fetchData();
@@ -101,6 +104,7 @@ export default function ProgramDetail() {
       setLeftMembers(membersData.left_members || []);
       setRehearsals(matrixData.rehearsals);
       setAttendanceMatrix(matrixData.matrix);
+      setAttendanceMode(matrixData.attendance_mode || 'rate');
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } } };
       setError(error.response?.data?.error || '加载失败');
@@ -437,6 +441,18 @@ export default function ProgramDetail() {
                         </Link>
                       </th>
                     ))}
+                    {attendanceMode === 'cumulative' ? (
+                      <>
+                        <th className="px-2 py-3 text-right text-xs font-medium text-purple-600 whitespace-nowrap">已参加</th>
+                        <th className="px-2 py-3 text-right text-xs font-medium text-gray-400 whitespace-nowrap">共</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-2 py-3 text-right text-xs font-medium text-green-600 whitespace-nowrap">出席</th>
+                        <th className="px-2 py-3 text-right text-xs font-medium text-orange-500 whitespace-nowrap">缺勤</th>
+                        <th className="px-2 py-3 text-right text-xs font-medium text-gray-400 whitespace-nowrap">共</th>
+                      </>
+                    )}
                     {canEdit && (
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         操作
@@ -447,6 +463,7 @@ export default function ProgramDetail() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {programMembers.map((pm) => {
                     const { member, is_leader } = pm;
+                    const counts = countAttendanceFromCellMap(attendanceMatrix[member.id], rehearsals);
                     return (
                     <tr key={member.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 whitespace-nowrap sticky left-0 bg-white z-10">
@@ -470,6 +487,18 @@ export default function ProgramDetail() {
                           />
                         </td>
                       ))}
+                      {attendanceMode === 'cumulative' ? (
+                        <>
+                          <td className="px-2 py-3 text-right text-sm whitespace-nowrap font-semibold text-purple-700">{counts.attended}</td>
+                          <td className="px-2 py-3 text-right text-sm whitespace-nowrap text-gray-400">{counts.total}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-2 py-3 text-right text-sm whitespace-nowrap font-semibold text-green-600">{counts.attended}</td>
+                          <td className="px-2 py-3 text-right text-sm whitespace-nowrap font-semibold text-orange-500">{counts.absent}</td>
+                          <td className="px-2 py-3 text-right text-sm whitespace-nowrap text-gray-400">{counts.total}</td>
+                        </>
+                      )}
                       {canEdit && (
                         <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
                           <div className="flex items-center justify-end space-x-2">

@@ -8,7 +8,7 @@ from database import db
 from models import Program, ProgramMember, ProgramTeacher, Member, Teacher, Semester, AuditLog, User, Rehearsal, Attendance
 from auth.decorators import login_required, committee_required
 from auth.permissions import Permission, check_program_permission
-from utils.attendance import build_rehearsal_slot, sorted_program_rehearsals
+from utils.attendance import build_rehearsal_slot, sorted_program_rehearsals, attendance_mode_for
 
 programs_bp = Blueprint('programs', __name__)
 
@@ -567,6 +567,7 @@ def get_attendance_matrix(program_id):
         'members': [pm.to_dict() for pm in sorted_active],
         'rehearsals': rehearsal_dicts,
         'matrix': matrix,
+        'attendance_mode': attendance_mode_for(program.name),
     })
 
 

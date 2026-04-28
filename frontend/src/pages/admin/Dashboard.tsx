@@ -40,8 +40,6 @@ function PersonalAttendanceCard({ data }: { data: PersonalAttendanceData }) {
           mode={prog.attendance_mode}
           rehearsals={prog.rehearsals}
           attendance={prog.attendance}
-          attendedCount={prog.attended_count}
-          completedTotal={prog.completed_total}
         />
       ))}
     </div>
@@ -73,7 +71,6 @@ function ManagedProgramCard({ program }: { program: ManagedProgramAttendance }) 
         <AttendanceTimeline
           rehearsals={program.rehearsals}
           members={program.members}
-          completedTotal={program.completed_total}
           mode={program.attendance_mode}
         />
       </div>

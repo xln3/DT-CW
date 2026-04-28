@@ -30,6 +30,76 @@ export type AttendanceMode = 'rate' | 'cumulative';
  */
 export type AttendanceCellValue = AttendanceSegmentData | null;
 
+/**
+ * Statuses where the member physically appeared (in part or in full).
+ * Includes leave_late / leave_early — the member did show up, just with an
+ * excuse covering the missed segment.
+ */
+export const PHYSICALLY_PRESENT_STATUSES = new Set([
+  'normal',
+  'late',
+  'early_leave',
+  'leave_late',
+  'leave_early',
+]);
+
+/**
+ * Statuses where the member was completely absent — never showed up at all,
+ * regardless of whether the absence was excused.
+ */
+export const NO_SHOW_STATUSES = new Set(['absent', 'leave_absent']);
+
+export interface AttendanceCounts {
+  attended: number;
+  absent: number;
+  total: number;
+}
+
+/** Compute counts from a {rehearsal_id: status string} map (dashboard / member-portal shape). */
+export function countAttendanceFromStatusMap(
+  attendance: Record<string, string>,
+  rehearsals: RehearsalSlot[],
+): AttendanceCounts {
+  let attended = 0;
+  let absent = 0;
+  let total = 0;
+  for (const r of rehearsals) {
+    if (!r.is_completed || !r.counts_for_attendance) continue;
+    total++;
+    const s = attendance[String(r.id)];
+    if (!s) continue;
+    if (PHYSICALLY_PRESENT_STATUSES.has(s)) attended++;
+    else if (NO_SHOW_STATUSES.has(s)) absent++;
+  }
+  return { attended, absent, total };
+}
+
+/**
+ * Compute counts from a {rehearsal_id: cell|null} map (attendance-matrix shape).
+ * cell === null skips both numerator and denominator (member not in program at
+ * that time, so the rehearsal doesn't apply to them).
+ */
+export function countAttendanceFromCellMap(
+  cells: Record<number, AttendanceCellValue> | undefined,
+  rehearsals: RehearsalSlot[],
+): AttendanceCounts {
+  let attended = 0;
+  let absent = 0;
+  let total = 0;
+  if (!cells) return { attended, absent, total };
+  for (const r of rehearsals) {
+    if (!r.is_completed || !r.counts_for_attendance) continue;
+    const cell = cells[r.id];
+    if (cell === null) continue; // not in program window — not their rehearsal
+    total++;
+    if (cell === undefined) continue;
+    const s = cell.status;
+    if (PHYSICALLY_PRESENT_STATUSES.has(s)) attended++;
+    else if (NO_SHOW_STATUSES.has(s)) absent++;
+  }
+  return { attended, absent, total };
+}
+
 const STATUS_LABELS: Record<string, string> = {
   normal: '正常',
   late: '迟到',
@@ -196,42 +266,56 @@ export function AttendanceLegend({ className = '' }: { className?: string }) {
   );
 }
 
-function summaryLabel(mode: AttendanceMode): string {
-  return mode === 'cumulative' ? '已参加' : '出席';
-}
-
-function summaryNumeric(
-  mode: AttendanceMode,
-  attended: number,
-  total: number,
-): { className: string; node: React.ReactNode } {
-  const className = mode === 'cumulative' ? 'text-purple-700' : 'text-gray-900';
-  return {
-    className,
-    node: (
-      <>
-        <span className="font-semibold">{attended}</span>
-        <span className="text-gray-400 font-normal"> / {total}</span>
-      </>
-    ),
-  };
+/**
+ * Inline summary phrasing:
+ * - rate (default programs): 出席 X · 缺勤 Y · 共 N
+ * - cumulative (encourage-mode programs, e.g. 芭蕾基训): 已参加 X / 共 N
+ */
+export function SummaryInline({
+  mode,
+  counts,
+}: {
+  mode: AttendanceMode;
+  counts: AttendanceCounts;
+}) {
+  if (mode === 'cumulative') {
+    return (
+      <span className="inline-flex items-baseline gap-1 whitespace-nowrap text-sm">
+        <span className="text-gray-500">已参加</span>
+        <span className="font-semibold text-purple-700">{counts.attended}</span>
+        <span className="text-gray-400">/ 共 {counts.total}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-baseline gap-1 whitespace-nowrap text-sm">
+      <span className="text-gray-500">出席</span>
+      <span className="font-semibold text-green-600">{counts.attended}</span>
+      <span className="text-gray-300">·</span>
+      <span className="text-gray-500">缺勤</span>
+      <span className="font-semibold text-orange-500">{counts.absent}</span>
+      <span className="text-gray-400 ml-0.5">/ 共 {counts.total}</span>
+    </span>
+  );
 }
 
 export interface AttendanceTimelineProps {
   rehearsals: RehearsalSlot[];
   members: MemberRow[];
-  completedTotal: number;
   mode: AttendanceMode;
 }
 
 /**
  * Per-member attendance grid: row per member, cell per rehearsal.
  * Used by the admin Dashboard's "我负责的剧目" section.
+ *
+ * Summary columns differ by mode:
+ *  - rate     → 出席 | 缺勤 | 共
+ *  - cumulative → 已参加 | 共
  */
 export function AttendanceTimeline({
   rehearsals,
   members,
-  completedTotal,
   mode,
 }: AttendanceTimelineProps) {
   if (rehearsals.length === 0) {
@@ -240,6 +324,7 @@ export function AttendanceTimeline({
   if (members.length === 0) {
     return <p className="text-gray-500 text-center py-6 text-sm">暂无成员</p>;
   }
+  const isCumulative = mode === 'cumulative';
   return (
     <div className="overflow-x-auto">
       <table className="border-separate border-spacing-x-1 border-spacing-y-0.5">
@@ -259,14 +344,23 @@ export function AttendanceTimeline({
                 {shortDate(r.date)}
               </th>
             ))}
-            <th className="text-right px-2 py-1 text-xs font-medium text-gray-500 whitespace-nowrap">
-              {summaryLabel(mode)}
-            </th>
+            {isCumulative ? (
+              <>
+                <th className="text-right px-2 py-1 text-xs font-medium text-purple-600 whitespace-nowrap">已参加</th>
+                <th className="text-right px-2 py-1 text-xs font-medium text-gray-400 whitespace-nowrap">共</th>
+              </>
+            ) : (
+              <>
+                <th className="text-right px-2 py-1 text-xs font-medium text-green-600 whitespace-nowrap">出席</th>
+                <th className="text-right px-2 py-1 text-xs font-medium text-orange-500 whitespace-nowrap">缺勤</th>
+                <th className="text-right px-2 py-1 text-xs font-medium text-gray-400 whitespace-nowrap">共</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
           {members.map((m) => {
-            const sum = summaryNumeric(mode, m.attended_count, completedTotal);
+            const counts = countAttendanceFromStatusMap(m.attendance, rehearsals);
             return (
               <tr key={m.member_id}>
                 <td className="px-2 text-sm text-gray-900 sticky left-0 bg-white z-10 whitespace-nowrap">
@@ -280,9 +374,18 @@ export function AttendanceTimeline({
                     <AttendanceCell cell={m.attendance[String(r.id)]} rehearsal={r} />
                   </td>
                 ))}
-                <td className={`px-2 text-right text-sm whitespace-nowrap ${sum.className}`}>
-                  {sum.node}
-                </td>
+                {isCumulative ? (
+                  <>
+                    <td className="px-2 text-right text-sm whitespace-nowrap font-semibold text-purple-700">{counts.attended}</td>
+                    <td className="px-2 text-right text-sm whitespace-nowrap text-gray-400">{counts.total}</td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-2 text-right text-sm whitespace-nowrap font-semibold text-green-600">{counts.attended}</td>
+                    <td className="px-2 text-right text-sm whitespace-nowrap font-semibold text-orange-500">{counts.absent}</td>
+                    <td className="px-2 text-right text-sm whitespace-nowrap text-gray-400">{counts.total}</td>
+                  </>
+                )}
               </tr>
             );
           })}
@@ -301,17 +404,13 @@ export function PersonalProgramRow({
   mode,
   rehearsals,
   attendance,
-  attendedCount,
-  completedTotal,
 }: {
   programName: string;
   mode: AttendanceMode;
   rehearsals: RehearsalSlot[];
   attendance: Record<string, string>;
-  attendedCount: number;
-  completedTotal: number;
 }) {
-  const sum = summaryNumeric(mode, attendedCount, completedTotal);
+  const counts = countAttendanceFromStatusMap(attendance, rehearsals);
   return (
     <div className="flex items-center gap-3 min-w-0">
       <span className="text-sm text-gray-700 w-24 flex-shrink-0 inline-flex items-center truncate">
@@ -329,9 +428,8 @@ export function PersonalProgramRow({
           ))
         )}
       </div>
-      <span className="text-sm whitespace-nowrap flex-shrink-0">
-        <span className="text-gray-500 mr-1">{summaryLabel(mode)}</span>
-        <span className={sum.className}>{sum.node}</span>
+      <span className="flex-shrink-0">
+        <SummaryInline mode={mode} counts={counts} />
       </span>
     </div>
   );

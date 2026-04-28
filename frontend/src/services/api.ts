@@ -363,6 +363,7 @@ export const programsApi = {
         detected_before: boolean;
         detected_after: boolean;
       } | null>>;
+      attendance_mode: 'rate' | 'cumulative';
     }>(`/admin/programs/${programId}/attendance-matrix`);
     return response.data;
   },

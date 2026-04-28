@@ -6,6 +6,8 @@ import type { Semester } from '../../types';
 import {
   AttendanceCell,
   AttendanceLegend,
+  SummaryInline,
+  countAttendanceFromStatusMap,
   type AttendanceMode,
 } from '../../components/AttendanceTimeline';
 
@@ -141,8 +143,7 @@ export default function MyAttendance() {
 
 function ProgramTimelineCard({ program }: { program: ProgramAttendance }) {
   const isCumulative = program.attendance_mode === 'cumulative';
-  const summaryLabel = isCumulative ? '已参加' : '出席';
-  const summaryClass = isCumulative ? 'text-purple-700' : 'text-gray-900';
+  const counts = countAttendanceFromStatusMap(program.attendance, program.rehearsals);
 
   return (
     <div className={`p-4 rounded-lg border ${isCumulative ? 'border-purple-200 bg-purple-50/40' : 'border-gray-200'}`}>
@@ -151,13 +152,7 @@ function ProgramTimelineCard({ program }: { program: ProgramAttendance }) {
           {isCumulative && <Sparkles className="w-4 h-4 text-purple-500 mr-1.5 flex-shrink-0" />}
           <span className="truncate">{program.program_name}</span>
         </h3>
-        <span className="text-sm whitespace-nowrap flex-shrink-0">
-          <span className="text-gray-500 mr-1">{summaryLabel}</span>
-          <span className={summaryClass}>
-            <span className="font-semibold">{program.attended_count}</span>
-            <span className="text-gray-400 font-normal"> / {program.completed_total}</span>
-          </span>
-        </span>
+        <SummaryInline mode={program.attendance_mode} counts={counts} />
       </div>
 
       {program.rehearsals.length === 0 ? (
@@ -196,7 +191,7 @@ function ProgramTimelineCard({ program }: { program: ProgramAttendance }) {
 
       {isCumulative && (
         <p className="mt-3 text-xs text-gray-600">
-          {program.attended_count > 0 ? '坚持得很好，继续加油！' : '欢迎随时来参加'}
+          {counts.attended > 0 ? '坚持得很好，继续加油！' : '欢迎随时来参加'}
         </p>
       )}
     </div>
