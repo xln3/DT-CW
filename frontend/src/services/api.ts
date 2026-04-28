@@ -299,7 +299,7 @@ export const programsApi = {
 
   getMembers: async (programId: number, params?: { include_left?: boolean }) => {
     const response = await api.get<{
-      members: { member: Member; role?: string; is_leader?: boolean }[];
+      members: { member: Member; role?: string; is_leader?: boolean; joined_at?: string }[];
       left_members?: { member: Member; joined_at?: string; left_at?: string; change_reason?: string }[];
     }>(
       `/admin/programs/${programId}/members`, { params }
@@ -323,6 +323,18 @@ export const programsApi = {
     await api.delete(`/admin/programs/${programId}/members/${memberId}`, {
       data: changeReason ? { change_reason: changeReason } : undefined,
     });
+  },
+
+  updateMember: async (
+    programId: number,
+    memberId: number,
+    data: { joined_at?: string; left_at?: string | null }
+  ) => {
+    const response = await api.put(
+      `/admin/programs/${programId}/members/${memberId}`,
+      data
+    );
+    return response.data;
   },
 
   setMemberLeader: async (programId: number, memberId: number, isLeader: boolean) => {

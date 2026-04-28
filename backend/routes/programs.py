@@ -344,6 +344,86 @@ def batch_add_program_members(program_id):
     })
 
 
+@programs_bp.route('/<int:program_id>/members/<int:member_id>', methods=['PUT'])
+@login_required
+def update_program_member(program_id, member_id):
+    """Update a member's joined_at / left_at on a program.
+
+    Editing joined_at to an earlier date back-fills absent attendance records
+    for any rehearsals that fall inside the new membership window but had no
+    record yet (typically because the member was added retroactively). The
+    actual present/late/leave status for those rehearsals is then a manual
+    edit per rehearsal.
+    """
+    user = g.current_user
+
+    if not check_program_permission(user, Permission.PROGRAM_EDIT, program_id):
+        return jsonify({'error': '无权修改该节目'}), 403
+
+    pm = ProgramMember.query.filter_by(
+        program_id=program_id,
+        member_id=member_id
+    ).first()
+
+    if not pm:
+        return jsonify({'error': '该成员不在节目中'}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': '请提供更新信息'}), 400
+
+    from datetime import datetime, date as _date, time as _time
+
+    if 'joined_at' in data:
+        joined_str = (data.get('joined_at') or '').strip()
+        if not joined_str:
+            return jsonify({'error': '加入日期不能为空'}), 400
+        try:
+            joined_date = _date.fromisoformat(joined_str)
+        except ValueError:
+            return jsonify({'error': '加入日期格式无效，应为 YYYY-MM-DD'}), 400
+        pm.joined_at = datetime.combine(joined_date, _time(0, 0))
+
+    if 'left_at' in data:
+        left_str = (data.get('left_at') or '').strip()
+        if left_str:
+            try:
+                left_date = _date.fromisoformat(left_str)
+            except ValueError:
+                return jsonify({'error': '离开日期格式无效，应为 YYYY-MM-DD'}), 400
+            pm.left_at = datetime.combine(left_date, _time(0, 0))
+        else:
+            pm.left_at = None
+
+    if pm.joined_at and pm.left_at and pm.left_at < pm.joined_at:
+        return jsonify({'error': '离开日期不能早于加入日期'}), 400
+
+    db.session.commit()
+
+    # Back-fill absent records for rehearsals newly inside the membership window.
+    _sync_member_attendance(program_id, member_id)
+
+    AuditLog.log(
+        action=AuditLog.ACTION_UPDATE,
+        user=user,
+        module='attendance',
+        resource_type='program_member',
+        resource_id=pm.id,
+        details={
+            'program_id': program_id,
+            'member_id': member_id,
+            'joined_at': pm.joined_at.isoformat() if pm.joined_at else None,
+            'left_at': pm.left_at.isoformat() if pm.left_at else None,
+        },
+        ip_address=request.remote_addr
+    )
+
+    return jsonify({
+        'message': '成员信息已更新',
+        'member': pm.to_dict()
+    })
+
+
 @programs_bp.route('/<int:program_id>/members/<int:member_id>', methods=['DELETE'])
 @login_required
 def remove_program_member(program_id, member_id):

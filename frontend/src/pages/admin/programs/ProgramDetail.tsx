@@ -31,6 +31,7 @@ interface ProgramMemberData {
   member: Member;
   is_leader?: boolean;
   role?: string;
+  joined_at?: string;
 }
 
 interface LeftMemberData {
@@ -66,6 +67,14 @@ export default function ProgramDetail() {
   // Remove member dialog state
   const [removeTarget, setRemoveTarget] = useState<{ memberId: number; memberName: string } | null>(null);
   const [removeReason, setRemoveReason] = useState('');
+
+  // Edit joined-date dialog state
+  const [editJoinedTarget, setEditJoinedTarget] = useState<
+    { memberId: number; memberName: string; currentJoinedAt: string } | null
+  >(null);
+  const [editJoinedDate, setEditJoinedDate] = useState('');
+  const [editJoinedSubmitting, setEditJoinedSubmitting] = useState(false);
+  const [editJoinedError, setEditJoinedError] = useState('');
 
   // Copy names feedback
   const [copied, setCopied] = useState(false);
@@ -163,6 +172,41 @@ export default function ProgramDetail() {
       document.body.removeChild(textarea);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleOpenEditJoined = (pm: ProgramMemberData) => {
+    const isoDate = pm.joined_at
+      ? pm.joined_at.slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+    setEditJoinedTarget({
+      memberId: pm.member.id,
+      memberName: pm.member.name,
+      currentJoinedAt: isoDate,
+    });
+    setEditJoinedDate(isoDate);
+    setEditJoinedError('');
+  };
+
+  const handleSubmitEditJoined = async () => {
+    if (!editJoinedTarget) return;
+    if (!editJoinedDate) {
+      setEditJoinedError('请选择加入日期');
+      return;
+    }
+    setEditJoinedSubmitting(true);
+    setEditJoinedError('');
+    try {
+      await programsApi.updateMember(Number(id), editJoinedTarget.memberId, {
+        joined_at: editJoinedDate,
+      });
+      setEditJoinedTarget(null);
+      await fetchData();
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } } };
+      setEditJoinedError(e.response?.data?.error || '更新失败');
+    } finally {
+      setEditJoinedSubmitting(false);
     }
   };
 
@@ -441,7 +485,9 @@ export default function ProgramDetail() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {programMembers.map(({ member, is_leader }) => (
+                  {programMembers.map((pm) => {
+                    const { member, is_leader } = pm;
+                    return (
                     <tr key={member.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 whitespace-nowrap sticky left-0 bg-white z-10">
                         <div className="flex items-center space-x-2">
@@ -467,6 +513,13 @@ export default function ProgramDetail() {
                         <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
                           <div className="flex items-center justify-end space-x-2">
                             <button
+                              onClick={() => handleOpenEditJoined(pm)}
+                              className="p-1 rounded text-gray-400 hover:text-primary-600"
+                              title="修改加入日期"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
                               onClick={() => handleToggleLeader(member.id, is_leader || false)}
                               className={`p-1 rounded ${
                                 is_leader
@@ -491,7 +544,8 @@ export default function ProgramDetail() {
                         </td>
                       )}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -542,6 +596,55 @@ export default function ProgramDetail() {
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Joined Date Dialog */}
+      {editJoinedTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4">
+            <div className="px-6 py-4 border-b">
+              <h3 className="text-lg font-medium text-gray-900">修改加入日期</h3>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <p className="text-sm text-gray-600">
+                <span className="font-medium">{editJoinedTarget.memberName}</span> 的加入日期
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">加入日期</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={editJoinedDate}
+                  onChange={(e) => setEditJoinedDate(e.target.value)}
+                />
+                <p className="mt-2 text-xs text-gray-500">
+                  改早后会为新进入考勤窗口的排练自动补"缺勤"记录，再到各排练详情页人工修正实际状态。
+                </p>
+              </div>
+              {editJoinedError && (
+                <p className="text-sm text-red-600">{editJoinedError}</p>
+              )}
+            </div>
+            <div className="px-6 py-4 bg-gray-50 border-t flex justify-end space-x-3">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setEditJoinedTarget(null)}
+                disabled={editJoinedSubmitting}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleSubmitEditJoined}
+                disabled={editJoinedSubmitting}
+              >
+                {editJoinedSubmitting ? '保存中...' : '保存'}
+              </button>
+            </div>
           </div>
         </div>
       )}
