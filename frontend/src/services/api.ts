@@ -471,24 +471,27 @@ export const rehearsalsApi = {
 };
 
 // Dashboard API
+export interface RehearsalSlotDTO {
+  id: number;
+  date: string;
+  start_time: string | null;
+  is_completed: boolean;
+  counts_for_attendance: boolean;
+}
+
 export interface ManagedProgramAttendance {
   program_id: number;
   program_name: string;
   attendance_mode: 'rate' | 'cumulative';
-  total_rehearsals: number;
+  rehearsals: RehearsalSlotDTO[];
+  completed_total: number;
   member_count: number;
   members: {
     member_id: number;
     member_name: string;
     is_leader: boolean;
-    total_rehearsals: number;
+    attendance: Record<string, string>;
     attended_count: number;
-    normal_count: number;
-    late_count: number;
-    early_leave_count: number;
-    absent_count: number;
-    leave_count: number;
-    attendance_rate: number;
   }[];
 }
 
@@ -1267,14 +1270,10 @@ export const memberPortalApi = {
         program_id: number;
         program_name: string;
         attendance_mode: 'rate' | 'cumulative';
-        total_rehearsals: number;
-        normal_count: number;
-        late_count: number;
-        early_leave_count: number;
-        absent_count: number;
-        leave_count: number;
+        rehearsals: RehearsalSlotDTO[];
+        completed_total: number;
+        attendance: Record<string, string>;
         attended_count: number;
-        attendance_rate: number;
       }[];
     }>('/member/my-attendance', {
       params: { semester_id: semesterId },

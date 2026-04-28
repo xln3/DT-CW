@@ -5,7 +5,12 @@ from flask import Blueprint, jsonify, g, request
 from database import db
 from models import Member, Teacher, Program, Rehearsal, Attendance, ProgramMember, Semester
 from auth.decorators import login_required
-from utils.attendance import counts_for_attendance, attendance_mode_for
+from utils.attendance import (
+    attendance_mode_for,
+    build_rehearsal_slot,
+    sorted_program_rehearsals,
+    PHYSICALLY_ATTENDED_STATUSES,
+)
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
@@ -113,14 +118,16 @@ def _sort_pms_by_pinyin(pms):
 @dashboard_bp.route('/managed-programs-attendance', methods=['GET'])
 @login_required
 def get_managed_programs_attendance():
-    """Per-member attendance breakdown for programs the user can manage.
+    """Per-member attendance timeline for programs the user can manage.
 
-    For program_manager users this is the dashboard's primary view: every
-    program they lead, with a row per member showing their attendance for
-    the semester. Admin and committee see all active programs in the semester.
+    For each program returns the full list of non-cancelled rehearsals and,
+    for each active member, a `rehearsal_id -> status` map. Frontend renders
+    this as a grid (row per member, color-coded cell per rehearsal) — no
+    percentages, since folding leave/absent/late into a single number is
+    misleading.
 
-    Cumulative-mode programs (e.g. 芭蕾基训) report attended_count instead of a
-    rate — same convention as the member-side /api/member/my-attendance.
+    Cumulative-mode programs (e.g. 芭蕾基训) use the same shape but the
+    summary is phrased as "已参加 X / 共 M 次" instead of "出席 X / M".
     """
     user = g.current_user
     semester_id = request.args.get('semester_id', type=int)
@@ -149,73 +156,54 @@ def get_managed_programs_attendance():
 
     programs_data = []
     for program in programs:
-        mode = attendance_mode_for(program.name)
-
-        # Count rehearsals that count for attendance in this program (semester
-        # rehearsals only — Program.rehearsals is already scoped by program_id).
-        program_rehearsals = program.rehearsals.filter(
-            Rehearsal.status != 'cancelled'
-        ).all()
-        counted_rehearsals = [r for r in program_rehearsals if counts_for_attendance(r)]
-        program_total = len(counted_rehearsals)
+        rehearsals = sorted_program_rehearsals(program)
+        rehearsal_dicts = [build_rehearsal_slot(r) for r in rehearsals]
+        counted_ids = {
+            r['id'] for r in rehearsal_dicts
+            if r['is_completed'] and r['counts_for_attendance']
+        }
 
         active_pms = [pm for pm in program.members.all() if pm.status == 'active']
         sorted_pms = _sort_pms_by_pinyin(active_pms)
+        member_ids = [pm.member_id for pm in sorted_pms if pm.member]
+        rehearsal_ids = [r['id'] for r in rehearsal_dicts]
 
-        # Bulk-load attendance records for this program's counted rehearsals
-        # to avoid N×M queries.
-        rehearsal_ids = [r.id for r in counted_rehearsals]
-        records_by_member = {pm.member_id: [] for pm in sorted_pms}
-        if rehearsal_ids:
-            all_records = Attendance.query.filter(
+        # Bulk-load every attendance record we'll need so we hit the DB once.
+        record_index = {}
+        if rehearsal_ids and member_ids:
+            recs = Attendance.query.filter(
                 Attendance.rehearsal_id.in_(rehearsal_ids),
-                Attendance.member_id.in_(records_by_member.keys())
+                Attendance.member_id.in_(member_ids),
             ).all()
-            for rec in all_records:
-                if rec.member_id in records_by_member:
-                    records_by_member[rec.member_id].append(rec)
+            for rec in recs:
+                record_index[(rec.member_id, rec.rehearsal_id)] = rec.status
 
         members_data = []
         for pm in sorted_pms:
             if not pm.member:
                 continue
-            recs = records_by_member.get(pm.member_id, [])
-            # Per-member total may differ from program_total only if the
-            # member joined/left mid-semester (joined_at / left_at). We keep
-            # this simple: total = number of records for this member in the
-            # counted set.
-            total = len(recs)
-            normal = sum(1 for r in recs if r.status == Attendance.STATUS_NORMAL)
-            late = sum(1 for r in recs if r.status == Attendance.STATUS_LATE)
-            early_leave = sum(1 for r in recs if r.status == Attendance.STATUS_EARLY_LEAVE)
-            absent = sum(1 for r in recs if r.status == Attendance.STATUS_ABSENT)
-            leave = sum(1 for r in recs if r.status in [
-                Attendance.STATUS_LEAVE_ABSENT,
-                Attendance.STATUS_LEAVE_LATE,
-                Attendance.STATUS_LEAVE_EARLY,
-            ])
-            attended = normal + late + early_leave
-            effective = attended + leave
-
+            attendance = {}
+            attended = 0
+            for rid in rehearsal_ids:
+                status = record_index.get((pm.member_id, rid))
+                if status:
+                    attendance[str(rid)] = status
+                    if rid in counted_ids and status in PHYSICALLY_ATTENDED_STATUSES:
+                        attended += 1
             members_data.append({
                 'member_id': pm.member_id,
                 'member_name': pm.member.name,
                 'is_leader': bool(pm.is_leader),
-                'total_rehearsals': total,
+                'attendance': attendance,
                 'attended_count': attended,
-                'normal_count': normal,
-                'late_count': late,
-                'early_leave_count': early_leave,
-                'absent_count': absent,
-                'leave_count': leave,
-                'attendance_rate': round(effective / total * 100, 1) if total > 0 else 100.0,
             })
 
         programs_data.append({
             'program_id': program.id,
             'program_name': program.name,
-            'attendance_mode': mode,
-            'total_rehearsals': program_total,
+            'attendance_mode': attendance_mode_for(program.name),
+            'rehearsals': rehearsal_dicts,
+            'completed_total': len(counted_ids),
             'member_count': len(members_data),
             'members': members_data,
         })

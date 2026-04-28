@@ -7,7 +7,13 @@ from models import (
     Program, Member, Rehearsal, Attendance, Semester, ProgramMember
 )
 from auth import login_required
-from utils.attendance import is_rehearsal_completed, counts_for_attendance, attendance_mode_for
+from utils.attendance import (
+    is_rehearsal_completed,
+    attendance_mode_for,
+    build_rehearsal_slot,
+    sorted_program_rehearsals,
+    PHYSICALLY_ATTENDED_STATUSES,
+)
 
 
 member_portal_bp = Blueprint('member_portal', __name__)
@@ -142,13 +148,11 @@ def get_my_program_detail(program_id):
 @member_portal_bp.route('/my-attendance', methods=['GET'])
 @login_required
 def get_my_attendance():
-    """Get attendance records for the current member.
+    """Attendance timeline for the current member.
 
-    Each program is reported with its own stats. Programs in CUMULATIVE_PROGRAMS
-    are reported in cumulative mode (count of attended sessions, no rate);
-    everything else uses the regular rate mode. There is no overall aggregate
-    rate — different programs have different cadences and combining them is
-    misleading.
+    Per program returns the full list of non-cancelled rehearsals plus a
+    `rehearsal_id -> status` map for this member. Frontend renders a
+    color-coded strip per program (request: 不显示百分比，按时间横轴显示).
     """
     user = g.current_user
     semester_id = request.args.get('semester_id', type=int)
@@ -177,46 +181,36 @@ def get_my_attendance():
         if semester_id and program.semester_id != semester_id:
             continue
 
-        all_records = Attendance.query.join(Rehearsal).filter(
-            Attendance.member_id == member.id,
-            Rehearsal.program_id == program.id,
-            Rehearsal.status != 'cancelled'
-        ).all()
-        records = [r for r in all_records if counts_for_attendance(r.rehearsal)]
+        rehearsals = sorted_program_rehearsals(program)
+        rehearsal_dicts = [build_rehearsal_slot(r) for r in rehearsals]
+        counted_ids = {
+            r['id'] for r in rehearsal_dicts
+            if r['is_completed'] and r['counts_for_attendance']
+        }
 
-        total = len(records)
-        normal = sum(1 for r in records if r.status == Attendance.STATUS_NORMAL)
-        late = sum(1 for r in records if r.status == Attendance.STATUS_LATE)
-        early_leave = sum(1 for r in records if r.status == Attendance.STATUS_EARLY_LEAVE)
-        absent = sum(1 for r in records if r.status == Attendance.STATUS_ABSENT)
-        leave = sum(1 for r in records if r.status in [
-            Attendance.STATUS_LEAVE_ABSENT,
-            Attendance.STATUS_LEAVE_LATE,
-            Attendance.STATUS_LEAVE_EARLY
-        ])
-
-        # "attended" = physically showed up at any point
-        # (normal + late + early_leave). Pure leave doesn't count toward
-        # encouragement; absent obviously doesn't.
-        attended_count = normal + late + early_leave
-        # "rate" mode: anything other than absent is acceptable
-        # (leave counts as effective participation)
-        effective = normal + late + early_leave + leave
-
-        mode = attendance_mode_for(program.name)
+        attendance = {}
+        attended = 0
+        rehearsal_ids = [r['id'] for r in rehearsal_dicts]
+        if rehearsal_ids:
+            recs = Attendance.query.filter(
+                Attendance.rehearsal_id.in_(rehearsal_ids),
+                Attendance.member_id == member.id,
+            ).all()
+            for rec in recs:
+                if not rec.status:
+                    continue
+                attendance[str(rec.rehearsal_id)] = rec.status
+                if rec.rehearsal_id in counted_ids and rec.status in PHYSICALLY_ATTENDED_STATUSES:
+                    attended += 1
 
         programs_data.append({
             'program_id': program.id,
             'program_name': program.name,
-            'attendance_mode': mode,
-            'total_rehearsals': total,
-            'normal_count': normal,
-            'late_count': late,
-            'early_leave_count': early_leave,
-            'absent_count': absent,
-            'leave_count': leave,
-            'attended_count': attended_count,
-            'attendance_rate': round(effective / total * 100, 1) if total > 0 else 100.0,
+            'attendance_mode': attendance_mode_for(program.name),
+            'rehearsals': rehearsal_dicts,
+            'completed_total': len(counted_ids),
+            'attendance': attendance,
+            'attended_count': attended,
         })
 
     return jsonify({

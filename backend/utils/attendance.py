@@ -1,5 +1,5 @@
 """Shared attendance calculation helpers."""
-from datetime import datetime
+from datetime import datetime, time as _time
 
 
 def is_rehearsal_completed(rehearsal):
@@ -37,6 +37,11 @@ ATTENDED_STATUSES = [
     'leave_early',
 ]
 
+# Statuses where the member was physically present (in part or in full).
+# This is what we count for the timeline-view "出席 X / M" summary —
+# leave does NOT count here, since "请假" means the member was not there.
+PHYSICALLY_ATTENDED_STATUSES = ('normal', 'late', 'early_leave')
+
 # Valid leave_type values when has_leave is True
 VALID_LEAVE_TYPES = ['full', 'late', 'early']
 
@@ -61,3 +66,31 @@ CUMULATIVE_PROGRAMS = {'芭蕾基训'}
 def attendance_mode_for(program_name: str) -> str:
     """Return 'cumulative' or 'rate' depending on the program."""
     return 'cumulative' if program_name in CUMULATIVE_PROGRAMS else 'rate'
+
+
+def build_rehearsal_slot(rehearsal):
+    """Compact dict for one rehearsal in a timeline payload."""
+    counts = (
+        bool(rehearsal.counts_towards_attendance)
+        if rehearsal.counts_towards_attendance is not None else True
+    )
+    return {
+        'id': rehearsal.id,
+        'date': rehearsal.scheduled_date.isoformat(),
+        'start_time': rehearsal.scheduled_start_time.strftime('%H:%M')
+            if rehearsal.scheduled_start_time else None,
+        'is_completed': is_rehearsal_completed(rehearsal),
+        'counts_for_attendance': counts,
+    }
+
+
+def sorted_program_rehearsals(program):
+    """All non-cancelled rehearsals of a program, ordered by date+time.
+
+    Untimed rehearsals sort before timed ones on the same day; this is
+    arbitrary but stable.
+    """
+    return sorted(
+        [r for r in program.rehearsals.all() if r.status != 'cancelled'],
+        key=lambda r: (r.scheduled_date, r.scheduled_start_time or _time(0, 0)),
+    )
