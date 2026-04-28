@@ -323,10 +323,6 @@ export interface CalendarEvent {
   updated_at: string;
 }
 
-export interface EventsByDate {
-  [date: string]: CalendarEvent[];
-}
-
 export interface CalendarStats {
   today_events: number;
   week_events: number;
@@ -663,6 +659,7 @@ export interface OverviewMatrixProgram {
   id: number;
   name: string;
   category: string;
+  attendance_mode: 'rate' | 'cumulative';
 }
 
 export interface OverviewMatrixCell {
@@ -714,35 +711,3 @@ export interface ProgramMatrixData {
   summary: Record<number, ProgramMatrixSummary>;
 }
 
-// Schedule types (for week view)
-export interface ScheduleEvent {
-  id: number;
-  program_id?: number;
-  program_name?: string;
-  program_color: string;
-  category?: string;
-  start_time?: string;
-  end_time?: string;
-  location?: string;
-  teacher_name?: string;
-  notes?: string;
-  // Calendar event specific fields
-  title?: string;
-  event_type?: EventType;
-  is_all_day?: boolean;
-}
-
-export interface ScheduleProgramInfo {
-  id: number;
-  name: string;
-  display_color: string;
-  category?: string;
-}
-
-export interface WeekScheduleData {
-  semester: Semester;
-  week_start: string;
-  week_end: string;
-  programs: ScheduleProgramInfo[];
-  schedule: Record<string, ScheduleEvent[]>;
-}

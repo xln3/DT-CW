@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Calendar, Users, LogIn } from 'lucide-react';
+import { Users, LogIn } from 'lucide-react';
 
 const SITE_TITLE = 'THUDT 2026春季训练';
 
@@ -12,12 +12,13 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', icon: Calendar, label: '排练时间表' },
-    { path: '/attendance', icon: Users, label: '考勤总览' },
+    { path: '/', icon: Users, label: '考勤总览' },
   ];
 
   const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
+    if (path === '/') {
+      return location.pathname === '/' || location.pathname.startsWith('/attendance');
+    }
     return location.pathname.startsWith(path);
   };
 
@@ -56,44 +57,25 @@ export default function PublicLayout({ children }: PublicLayoutProps) {
               ))}
               <Link
                 to="/login"
-                className="ml-4 flex items-center px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700 transition-colors"
+                className="ml-4 inline-flex items-center px-5 py-2.5 bg-primary-600 text-white rounded-md text-base font-semibold shadow-md hover:bg-primary-700 hover:shadow-lg transition-all"
               >
-                <LogIn className="w-4 h-4 mr-2" />
+                <LogIn className="w-5 h-5 mr-2" />
                 登录
               </Link>
             </nav>
 
-            {/* Mobile Navigation Button */}
+            {/* Mobile login button */}
             <div className="md:hidden flex items-center">
               <Link
                 to="/login"
-                className="p-2 text-gray-600 hover:text-primary-600"
+                className="inline-flex items-center px-3 py-2 bg-primary-600 text-white rounded-md text-sm font-semibold shadow-md hover:bg-primary-700 transition-colors"
               >
-                <LogIn className="w-6 h-6" />
+                <LogIn className="w-4 h-4 mr-1.5" />
+                登录
               </Link>
             </div>
           </div>
         </div>
-
-        {/* Mobile Navigation */}
-        <nav className="md:hidden border-t bg-white">
-          <div className="flex justify-around py-2">
-            {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex flex-col items-center px-3 py-2 text-xs ${
-                  isActive(item.path)
-                    ? 'text-primary-600'
-                    : 'text-gray-500'
-                }`}
-              >
-                <item.icon className="w-5 h-5 mb-1" />
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        </nav>
       </header>
 
       {/* Main Content */}

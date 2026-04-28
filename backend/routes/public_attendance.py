@@ -3,7 +3,12 @@ from flask import Blueprint, request, jsonify
 
 from database import db
 from models import Program, Member, Rehearsal, Attendance, Semester, ProgramMember
-from utils.attendance import is_rehearsal_completed, counts_for_attendance, ATTENDED_STATUSES
+from utils.attendance import (
+    is_rehearsal_completed,
+    counts_for_attendance,
+    ATTENDED_STATUSES,
+    attendance_mode_for,
+)
 
 public_attendance_bp = Blueprint('public_attendance', __name__)
 
@@ -277,7 +282,8 @@ def attendance_overview_matrix():
         program_list.append({
             'id': program.id,
             'name': program.name,
-            'category': program.category or ''
+            'category': program.category or '',
+            'attendance_mode': attendance_mode_for(program.name),
         })
 
         # Only count currently active members — exclude anyone who has left the program

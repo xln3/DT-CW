@@ -29,8 +29,6 @@ import type {
   ExpenseForm,
   Semester,
   SemesterType,
-  WeekScheduleData,
-  ScheduleEvent,
   RecognitionResult,
   OverviewMatrixData,
   ProgramMatrixData,
@@ -772,48 +770,6 @@ export const calendarApi = {
   },
 };
 
-// Public Calendar API
-export const publicCalendarApi = {
-  getMonthEvents: async (year: number, month: number) => {
-    const response = await api.get(`/public/calendar/month/${year}/${month}`);
-    return response.data;
-  },
-
-  getWeekEvents: async (date?: string) => {
-    const response = await api.get('/public/calendar/week', {
-      params: { date },
-    });
-    return response.data;
-  },
-
-  getUpcomingEvents: async (days: number = 7, limit: number = 10) => {
-    const response = await api.get('/public/calendar/upcoming', {
-      params: { days, limit },
-    });
-    return response.data;
-  },
-
-  getTodayEvents: async () => {
-    const response = await api.get('/public/calendar/today');
-    return response.data;
-  },
-
-  getEventTypes: async () => {
-    const response = await api.get('/public/calendar/event-types');
-    return response.data.event_types;
-  },
-
-  getEvent: async (id: number) => {
-    const response = await api.get(`/public/calendar/events/${id}`);
-    return response.data.event;
-  },
-
-  getStats: async () => {
-    const response = await api.get('/public/calendar/stats');
-    return response.data;
-  },
-};
-
 // Venues API
 export const venuesApi = {
   list: async (params?: { is_active?: boolean }) => {
@@ -921,31 +877,6 @@ export const publicVenuesApi = {
     return response.data;
   },
 };
-
-// Public Schedule API (for week schedule view)
-export const publicScheduleApi = {
-  getWeekSchedule: async (params?: { start_date?: string; semester_id?: number }) => {
-    const response = await api.get<WeekScheduleData>('/public/schedule/week', { params });
-    return response.data;
-  },
-
-  getDaySchedule: async (date: string, semesterId?: number) => {
-    const response = await api.get<{
-      date: string;
-      semester: Semester;
-      events: ScheduleEvent[];
-    }>(`/public/schedule/day/${date}`, {
-      params: { semester_id: semesterId },
-    });
-    return response.data;
-  },
-
-  getCurrentSemester: async () => {
-    const response = await api.get<{ semester: Semester | null }>('/public/schedule/current-semester');
-    return response.data.semester;
-  },
-};
-
 
 // Teacher Applications API
 export const teacherApplicationsApi = {

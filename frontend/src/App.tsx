@@ -21,7 +21,6 @@ import { VenueForm } from './pages/admin/venues';
 import { BudgetList } from './pages/admin/budget';
 import { SemesterList, UserList, SettingsHub, Profile } from './pages/admin/settings';
 import { AttendanceOverview, ProgramAttendance, AttendanceSearch } from './pages/public';
-import Calendar from './pages/public/Calendar';
 
 // Query client
 const queryClient = new QueryClient({
@@ -106,8 +105,8 @@ function App() {
 
             {/* Public routes with layout */}
             <Route element={<PublicLayoutWrapper />}>
-              <Route path="/" element={<Calendar />} />
-              <Route path="/attendance" element={<AttendanceOverview />} />
+              <Route path="/" element={<AttendanceOverview />} />
+              <Route path="/attendance" element={<Navigate to="/" replace />} />
               <Route path="/attendance/programs/:id" element={<ProgramAttendance />} />
               <Route path="/attendance/search" element={<AttendanceSearch />} />
             </Route>
