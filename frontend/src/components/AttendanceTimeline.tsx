@@ -1,4 +1,9 @@
 import { Crown, Sparkles } from 'lucide-react';
+import {
+  getAttendanceStyles,
+  type AttendanceSegmentData,
+  type SegmentStyle,
+} from '../utils/attendance';
 
 export interface RehearsalSlot {
   id: number;
@@ -18,21 +23,21 @@ export interface MemberRow {
 
 export type AttendanceMode = 'rate' | 'cumulative';
 
-interface StatusMeta {
-  bg: string;
-  text: string;
-  label: string;
-  letter: string;
-}
+/**
+ * Cell value the front-end receives. `null` means the member was NOT in the
+ * program at this rehearsal's time (rendered as "—"); `undefined`/missing key
+ * means in-window but no record yet.
+ */
+export type AttendanceCellValue = AttendanceSegmentData | null;
 
-const STATUS_META: Record<string, StatusMeta> = {
-  normal:       { bg: 'bg-green-500',  text: 'text-white', label: '正常',         letter: '·' },
-  late:         { bg: 'bg-yellow-400', text: 'text-white', label: '迟到',         letter: '迟' },
-  early_leave:  { bg: 'bg-orange-400', text: 'text-white', label: '早退',         letter: '早' },
-  absent:       { bg: 'bg-red-500',    text: 'text-white', label: '缺勤',         letter: '缺' },
-  leave_absent: { bg: 'bg-blue-400',   text: 'text-white', label: '请假',         letter: '假' },
-  leave_late:   { bg: 'bg-indigo-400', text: 'text-white', label: '迟到(已请假)', letter: '假' },
-  leave_early:  { bg: 'bg-indigo-400', text: 'text-white', label: '早退(已请假)', letter: '假' },
+const STATUS_LABELS: Record<string, string> = {
+  normal: '正常',
+  late: '迟到',
+  early_leave: '早退',
+  absent: '缺勤',
+  leave_absent: '请假',
+  leave_late: '迟到(请假)',
+  leave_early: '早退(请假)',
 };
 
 function shortDate(iso: string): string {
@@ -46,65 +51,147 @@ function rehearsalTooltip(r: RehearsalSlot): string {
   return `${r.date}${time}${flag}`;
 }
 
+function inferSegmentData(status: string): AttendanceSegmentData {
+  const has_leave = status.startsWith('leave_');
+  let leave_type: string | null = null;
+  if (status === 'leave_absent') leave_type = 'full';
+  else if (status === 'leave_late') leave_type = 'late';
+  else if (status === 'leave_early') leave_type = 'early';
+  return {
+    status,
+    detected_before: false,
+    detected_after: false,
+    has_leave,
+    leave_type,
+    manual_override: false,
+  };
+}
+
+function normalizeCell(
+  cell: string | AttendanceCellValue | undefined,
+): AttendanceSegmentData | null | undefined {
+  if (cell === null || cell === undefined) return cell;
+  if (typeof cell === 'string') return inferSegmentData(cell);
+  return cell;
+}
+
+interface ThreeSegmentSquareProps {
+  styles: { before: SegmentStyle; middle: SegmentStyle; after: SegmentStyle };
+  height?: string; // tailwind h-* class
+  middleWidth?: string; // tailwind w-* class
+  edgeWidth?: string; // tailwind w-* class
+}
+
+/**
+ * Three-segment colored bar: before | middle | after.
+ * Reused by AttendanceCell (h-4) and AttendanceLegend (h-3 sample).
+ */
+export function ThreeSegmentSquare({
+  styles,
+  height = 'h-4',
+  middleWidth = 'w-4',
+  edgeWidth = 'w-1.5',
+}: ThreeSegmentSquareProps) {
+  return (
+    <span className="inline-flex items-center align-middle">
+      <span className={`${edgeWidth} ${height} rounded-l-sm ${styles.before.colorClass}`} />
+      <span className={`${middleWidth} ${height} ${styles.middle.colorClass}`} />
+      <span className={`${edgeWidth} ${height} rounded-r-sm ${styles.after.colorClass}`} />
+    </span>
+  );
+}
+
 export function AttendanceCell({
-  status,
+  cell,
   rehearsal,
 }: {
-  status: string | undefined;
+  cell: string | AttendanceCellValue | undefined;
   rehearsal: RehearsalSlot;
 }) {
   const tip = rehearsalTooltip(rehearsal);
-  // Only show a status when the rehearsal has actually happened. The system
-  // pre-populates 'absent' records when rehearsals are created, so a future
-  // rehearsal can carry a status — but treating that as "缺勤" would be wrong.
+  const data = normalizeCell(cell);
+
+  // 1. Member was not in program at this time → "—"
+  if (data === null) {
+    return (
+      <span
+        className="inline-flex items-center justify-center w-7 h-4 align-middle text-gray-300 text-xs"
+        title={`${tip} — 不在节目`}
+      >
+        —
+      </span>
+    );
+  }
+
+  // 2. Future / not-yet-happened rehearsal → dashed slot.
+  // (We deliberately ignore any pre-populated absent record that may exist for
+  // future rehearsals — see the rehearsal-create flow.)
   if (!rehearsal.is_completed) {
     return (
-      <div
-        className="w-6 h-6 rounded-sm border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-[10px] text-gray-300"
+      <span
+        className="inline-flex items-center justify-center w-7 h-4 align-middle rounded-sm border border-dashed border-gray-300 bg-gray-50 text-[10px] text-gray-300"
         title={`${tip} — 未发生`}
       >
         ·
-      </div>
+      </span>
     );
   }
-  if (status && STATUS_META[status]) {
-    const meta = STATUS_META[status];
+
+  // 3. In window but no attendance record yet → "?"
+  if (data === undefined) {
     return (
-      <div
-        className={`w-6 h-6 rounded-sm flex items-center justify-center text-[10px] font-medium ${meta.bg} ${meta.text}`}
-        title={`${tip} — ${meta.label}`}
+      <span
+        className="inline-flex items-center justify-center w-7 h-4 align-middle rounded-sm bg-gray-200 text-[10px] text-gray-400"
+        title={`${tip} — 未标记`}
       >
-        {meta.letter}
-      </div>
+        ?
+      </span>
     );
   }
+
+  // 4. Actual record → three-segment colored bar.
+  const styles = getAttendanceStyles(data);
+  const label = STATUS_LABELS[data.status] || data.status;
+  const opacity = rehearsal.counts_for_attendance ? '' : 'opacity-50';
   return (
-    <div
-      className="w-6 h-6 rounded-sm bg-gray-200 flex items-center justify-center text-[10px] text-gray-400"
-      title={`${tip} — 未标记`}
+    <span
+      className={`inline-flex items-center align-middle ${opacity}`}
+      title={`${tip} — ${label} | 签到:${styles.before.tooltip.replace('签到', '')} 排练:${styles.middle.tooltip.replace('排练', '')} 签退:${styles.after.tooltip.replace('签退', '')}`}
     >
-      ?
-    </div>
+      <ThreeSegmentSquare styles={styles} />
+    </span>
   );
 }
 
 export function AttendanceLegend({ className = '' }: { className?: string }) {
-  const items: Array<{ bg: string; label: string; dashed?: boolean }> = [
-    { bg: 'bg-green-500',  label: '正常' },
-    { bg: 'bg-yellow-400', label: '迟到' },
-    { bg: 'bg-orange-400', label: '早退' },
-    { bg: 'bg-red-500',    label: '缺勤' },
-    { bg: 'bg-blue-400',   label: '请假' },
-    { bg: 'bg-gray-50 border border-dashed border-gray-300', label: '未发生', dashed: true },
+  const statuses: Array<{ status: string; label: string }> = [
+    { status: 'normal',       label: '正常' },
+    { status: 'late',         label: '迟到' },
+    { status: 'early_leave',  label: '早退' },
+    { status: 'absent',       label: '缺勤' },
+    { status: 'leave_absent', label: '请假' },
+    { status: 'leave_late',   label: '迟到(请假)' },
+    { status: 'leave_early',  label: '早退(请假)' },
   ];
   return (
     <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 ${className}`}>
-      {items.map((it) => (
-        <span key={it.label} className="flex items-center">
-          <span className={`w-3 h-3 rounded-sm mr-1 ${it.bg}`} />
-          {it.label}
-        </span>
-      ))}
+      {statuses.map((it) => {
+        const styles = getAttendanceStyles(inferSegmentData(it.status));
+        return (
+          <span key={it.status} className="inline-flex items-center">
+            <ThreeSegmentSquare styles={styles} height="h-3" middleWidth="w-3" edgeWidth="w-1" />
+            <span className="ml-1">{it.label}</span>
+          </span>
+        );
+      })}
+      <span className="inline-flex items-center">
+        <span className="text-gray-300 text-sm mx-0.5">—</span>
+        <span className="ml-1">不在节目</span>
+      </span>
+      <span className="inline-flex items-center">
+        <span className="w-3 h-3 rounded-sm border border-dashed border-gray-300" />
+        <span className="ml-1">未发生</span>
+      </span>
     </div>
   );
 }
@@ -164,7 +251,7 @@ export function AttendanceTimeline({
             {rehearsals.map((r) => (
               <th
                 key={r.id}
-                className={`px-0 py-1 text-center text-[10px] font-normal w-6 ${
+                className={`px-0 py-1 text-center text-[10px] font-normal ${
                   r.is_completed ? 'text-gray-500' : 'text-gray-300'
                 }`}
                 title={rehearsalTooltip(r)}
@@ -189,8 +276,8 @@ export function AttendanceTimeline({
                   </span>
                 </td>
                 {rehearsals.map((r) => (
-                  <td key={r.id} className="p-0 align-middle">
-                    <AttendanceCell status={m.attendance[String(r.id)]} rehearsal={r} />
+                  <td key={r.id} className="p-0 align-middle text-center">
+                    <AttendanceCell cell={m.attendance[String(r.id)]} rehearsal={r} />
                   </td>
                 ))}
                 <td className={`px-2 text-right text-sm whitespace-nowrap ${sum.className}`}>
@@ -237,7 +324,7 @@ export function PersonalProgramRow({
         ) : (
           rehearsals.map((r) => (
             <div key={r.id} className="flex-shrink-0">
-              <AttendanceCell status={attendance[String(r.id)]} rehearsal={r} />
+              <AttendanceCell cell={attendance[String(r.id)]} rehearsal={r} />
             </div>
           ))
         )}

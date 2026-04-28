@@ -8,6 +8,7 @@ from database import db
 from models import Program, ProgramMember, ProgramTeacher, Member, Teacher, Semester, AuditLog, User, Rehearsal, Attendance
 from auth.decorators import login_required, committee_required
 from auth.permissions import Permission, check_program_permission
+from utils.attendance import build_rehearsal_slot, sorted_program_rehearsals
 
 programs_bp = Blueprint('programs', __name__)
 
@@ -490,91 +491,82 @@ def set_member_leader(program_id, member_id):
 @programs_bp.route('/<int:program_id>/attendance-matrix', methods=['GET'])
 @login_required
 def get_attendance_matrix(program_id):
-    """Get attendance matrix for a program.
+    """Per-member attendance matrix for a program.
 
-    Returns:
-    - members: List of members (sorted: leaders first, then by pinyin)
-    - rehearsals: List of completed rehearsals (sorted by date)
-    - matrix: Dict mapping member_id -> rehearsal_id -> attendance status
-              If member was not in program at rehearsal time, status is None
+    Returns the same rehearsal-slot shape as the dashboard's
+    managed-programs-attendance API so the front-end can render both with the
+    same `AttendanceCell` component.
+
+    - members: active members (leaders first, then by pinyin)
+    - rehearsals: ALL non-cancelled rehearsals (incl. future), each with
+      id/date/start_time/is_completed/counts_for_attendance
+    - matrix: member_id -> rehearsal_id -> cell, where cell is one of:
+        * null: member was NOT in program at rehearsal time
+        * { status, has_leave, leave_type, detected_before, detected_after }:
+          actual attendance record
+        * key absent (member in window but no record): cell undefined on the
+          front-end, rendered as a "?" placeholder for completed rehearsals or
+          a dashed slot for future ones.
     """
-    from datetime import datetime
-
     program = Program.query.get_or_404(program_id)
 
     user = g.current_user
     if user.is_program_manager() and not user.can_manage_program(program_id):
         return jsonify({'error': '无权访问该节目'}), 403
 
-    # Get all program members (including those who left, for historical data)
-    all_members = program.members.all()
-    # For active members, sort by leader + pinyin
-    active_members = [pm for pm in all_members if pm.status == 'active']
+    rehearsals = sorted_program_rehearsals(program)
+    rehearsal_dicts = [build_rehearsal_slot(r) for r in rehearsals]
+
+    active_members = [pm for pm in program.members.all() if pm.status == 'active']
     sorted_active = _sort_members_by_pinyin(active_members)
+    member_ids = [pm.member_id for pm in sorted_active]
+    rehearsal_ids = [r.id for r in rehearsals]
 
-    # Get completed rehearsals (past date or past end time)
-    now = datetime.now()
-    today = now.date()
-    current_time = now.time()
+    record_index = {}
+    if rehearsal_ids and member_ids:
+        recs = Attendance.query.filter(
+            Attendance.rehearsal_id.in_(rehearsal_ids),
+            Attendance.member_id.in_(member_ids),
+        ).all()
+        for rec in recs:
+            record_index[(rec.member_id, rec.rehearsal_id)] = rec
 
-    all_rehearsals = program.rehearsals.filter(
-        Rehearsal.status != 'cancelled'
-    ).order_by(Rehearsal.scheduled_date.asc()).all()
-
-    completed_rehearsals = []
-    for r in all_rehearsals:
-        if r.scheduled_date < today:
-            completed_rehearsals.append(r)
-        elif r.scheduled_date == today and r.scheduled_end_time and r.scheduled_end_time <= current_time:
-            completed_rehearsals.append(r)
-
-    # Build attendance matrix
-    # For each member, check if they were in the program at rehearsal time
     matrix = {}
     for pm in sorted_active:
         member_id = pm.member_id
-        matrix[member_id] = {}
+        cells = {}
         joined_date = pm.joined_at.date() if pm.joined_at else None
         left_date = pm.left_at.date() if pm.left_at else None
 
-        for rehearsal in completed_rehearsals:
-            rehearsal_date = rehearsal.scheduled_date
-            # Check if member was in program at this time
-            was_in_program = True
-            if joined_date and rehearsal_date < joined_date:
-                was_in_program = False
-            if left_date and rehearsal_date > left_date:
-                was_in_program = False
+        for rehearsal in rehearsals:
+            rd = rehearsal.scheduled_date
+            in_window = True
+            if joined_date and rd < joined_date:
+                in_window = False
+            if left_date and rd > left_date:
+                in_window = False
 
-            if not was_in_program:
-                matrix[member_id][rehearsal.id] = None
-            else:
-                # Get attendance record
-                record = Attendance.query.filter_by(
-                    rehearsal_id=rehearsal.id,
-                    member_id=member_id
-                ).first()
-                if record:
-                    matrix[member_id][rehearsal.id] = {
-                        'status': record.status,
-                        'has_leave': record.has_leave,
-                        'leave_type': record.leave_type,
-                        'detected_before': record.detected_before,
-                        'detected_after': record.detected_after,
-                    }
-                else:
-                    # No record exists (shouldn't happen, but handle gracefully)
-                    matrix[member_id][rehearsal.id] = {'status': 'absent'}
+            if not in_window:
+                cells[rehearsal.id] = None
+                continue
+
+            rec = record_index.get((member_id, rehearsal.id))
+            if rec:
+                cells[rehearsal.id] = {
+                    'status': rec.status,
+                    'has_leave': rec.has_leave,
+                    'leave_type': rec.leave_type,
+                    'detected_before': rec.detected_before,
+                    'detected_after': rec.detected_after,
+                }
+            # else: leave key absent — front-end treats as "in window, no record"
+
+        matrix[member_id] = cells
 
     return jsonify({
         'members': [pm.to_dict() for pm in sorted_active],
-        'rehearsals': [{
-            'id': r.id,
-            'scheduled_date': str(r.scheduled_date),
-            'scheduled_start_time': str(r.scheduled_start_time) if r.scheduled_start_time else None,
-            'scheduled_end_time': str(r.scheduled_end_time) if r.scheduled_end_time else None,
-        } for r in completed_rehearsals],
-        'matrix': matrix
+        'rehearsals': rehearsal_dicts,
+        'matrix': matrix,
     })
 
 

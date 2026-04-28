@@ -20,10 +20,14 @@ import { programsApi, membersApi } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { Program, Member } from '../../../types';
 import { PROGRAM_CATEGORIES } from '../../../types';
-import { getAttendanceStyles } from '../../../utils/attendance';
 import type { AttendanceSegmentData } from '../../../utils/attendance';
 import MemberPicker from '../../../components/MemberPicker';
 import { exportAttendanceCsv } from '../../../utils/exportCsv';
+import {
+  AttendanceCell,
+  AttendanceLegend,
+  type RehearsalSlot,
+} from '../../../components/AttendanceTimeline';
 
 type AttendanceData = AttendanceSegmentData;
 
@@ -41,12 +45,6 @@ interface LeftMemberData {
   change_reason?: string;
 }
 
-interface RehearsalData {
-  id: number;
-  scheduled_date: string;
-  scheduled_start_time: string | null;
-  scheduled_end_time: string | null;
-}
 
 export default function ProgramDetail() {
   const { id } = useParams();
@@ -80,7 +78,7 @@ export default function ProgramDetail() {
   const [copied, setCopied] = useState(false);
 
   // Attendance matrix data
-  const [rehearsals, setRehearsals] = useState<RehearsalData[]>([]);
+  const [rehearsals, setRehearsals] = useState<RehearsalSlot[]>([]);
   const [attendanceMatrix, setAttendanceMatrix] = useState<
     Record<number, Record<number, AttendanceData | null>>
   >({});
@@ -250,33 +248,10 @@ export default function ProgramDetail() {
     }
   };
 
-  // 渲染三段式考勤状态
-  const renderAttendanceSquares = (att: AttendanceData | null) => {
-    if (att === null) {
-      return (
-        <div className="inline-flex items-center justify-center w-10" title="不在节目中">
-          <span className="text-gray-300">—</span>
-        </div>
-      );
-    }
-
-    const styles = getAttendanceStyles(att);
-    return (
-      <div
-        className="inline-flex items-center"
-        title={`${styles.before.tooltip} | ${styles.middle.tooltip} | ${styles.after.tooltip}`}
-      >
-        <div className={`w-1.5 h-4 rounded-l-sm ${styles.before.colorClass}`} />
-        <div className={`w-4 h-4 ${styles.middle.colorClass}`} />
-        <div className={`w-1.5 h-4 rounded-r-sm ${styles.after.colorClass}`} />
-      </div>
-    );
-  };
-
-  // 格式化排练日期显示
-  const formatRehearsalDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
+  // Format YYYY-MM-DD to MM/DD using string split (timezone-safe).
+  const formatRehearsalDate = (iso: string) => {
+    const [, m, d] = iso.split('-');
+    return `${m}/${d}`;
   };
 
   if (isLoading) {
@@ -414,7 +389,7 @@ export default function ProgramDetail() {
                   onClick={() =>
                     exportAttendanceCsv(
                       programMembers.map((pm) => pm.member),
-                      rehearsals,
+                      rehearsals.map((r) => ({ id: r.id, scheduled_date: r.date })),
                       attendanceMatrix,
                       program?.name || '考勤'
                     )
@@ -434,25 +409,8 @@ export default function ProgramDetail() {
             </div>
           </div>
 
-          {/* Legend */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 text-sm text-gray-600">
-            <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 bg-green-500 rounded-sm"></div>
-              <span>出勤</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 bg-orange-500 rounded-sm"></div>
-              <span>缺勤</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
-              <span>请假</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span className="text-gray-300">—</span>
-              <span>不在节目</span>
-            </div>
-          </div>
+          {/* Legend (统一用三段式) */}
+          <AttendanceLegend className="mb-4" />
 
           {programMembers.length === 0 ? (
             <p className="text-center text-gray-500 py-8">暂无成员</p>
@@ -467,13 +425,15 @@ export default function ProgramDetail() {
                     {rehearsals.map((r) => (
                       <th
                         key={r.id}
-                        className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className={`px-2 py-3 text-center text-xs font-medium uppercase tracking-wider ${
+                          r.is_completed ? 'text-gray-500' : 'text-gray-300'
+                        }`}
                       >
                         <Link
                           to={`/admin/rehearsals/${r.id}`}
                           className="hover:text-primary-600"
                         >
-                          {formatRehearsalDate(r.scheduled_date)}
+                          {formatRehearsalDate(r.date)}
                         </Link>
                       </th>
                     ))}
@@ -504,9 +464,10 @@ export default function ProgramDetail() {
                       </td>
                       {rehearsals.map((r) => (
                         <td key={r.id} className="px-2 py-3 text-center">
-                          {renderAttendanceSquares(
-                            attendanceMatrix[member.id]?.[r.id] ?? null
-                          )}
+                          <AttendanceCell
+                            cell={attendanceMatrix[member.id]?.[r.id]}
+                            rehearsal={r}
+                          />
                         </td>
                       ))}
                       {canEdit && (
@@ -552,7 +513,7 @@ export default function ProgramDetail() {
           )}
 
           {rehearsals.length === 0 && programMembers.length > 0 && (
-            <p className="text-center text-gray-500 py-4 text-sm">暂无已完成的排练</p>
+            <p className="text-center text-gray-500 py-4 text-sm">暂无排练</p>
           )}
         </div>
       </div>

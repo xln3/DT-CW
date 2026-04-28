@@ -354,13 +354,8 @@ export const programsApi = {
 
   getAttendanceMatrix: async (programId: number) => {
     const response = await api.get<{
-      members: { member: Member; is_leader: boolean }[];
-      rehearsals: {
-        id: number;
-        scheduled_date: string;
-        scheduled_start_time: string | null;
-        scheduled_end_time: string | null;
-      }[];
+      members: { member: Member; is_leader: boolean; joined_at?: string; left_at?: string }[];
+      rehearsals: RehearsalSlotDTO[];
       matrix: Record<number, Record<number, {
         status: string;
         has_leave: boolean;

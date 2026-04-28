@@ -185,7 +185,7 @@ function ProgramTimelineCard({ program }: { program: ProgramAttendance }) {
               {program.rehearsals.map((r) => (
                 <AttendanceCell
                   key={r.id}
-                  status={program.attendance[String(r.id)]}
+                  cell={program.attendance[String(r.id)]}
                   rehearsal={r}
                 />
               ))}
