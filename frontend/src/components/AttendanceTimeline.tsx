@@ -53,6 +53,36 @@ export interface AttendanceCounts {
   attended: number;
   absent: number;
   total: number;
+  // Per-status sub-breakdowns (sum of all 7 == total - unmarked rehearsals).
+  normal: number;
+  late: number;
+  earlyLeave: number;
+  leaveLate: number;
+  leaveEarly: number;
+  leaveAbsent: number;
+  plainAbsent: number;
+}
+
+function emptyCounts(): AttendanceCounts {
+  return {
+    attended: 0, absent: 0, total: 0,
+    normal: 0, late: 0, earlyLeave: 0,
+    leaveLate: 0, leaveEarly: 0, leaveAbsent: 0, plainAbsent: 0,
+  };
+}
+
+function tally(counts: AttendanceCounts, status: string): void {
+  switch (status) {
+    case 'normal': counts.normal++; break;
+    case 'late': counts.late++; break;
+    case 'early_leave': counts.earlyLeave++; break;
+    case 'leave_late': counts.leaveLate++; break;
+    case 'leave_early': counts.leaveEarly++; break;
+    case 'leave_absent': counts.leaveAbsent++; break;
+    case 'absent': counts.plainAbsent++; break;
+  }
+  if (PHYSICALLY_PRESENT_STATUSES.has(status)) counts.attended++;
+  else if (NO_SHOW_STATUSES.has(status)) counts.absent++;
 }
 
 /** Compute counts from a {rehearsal_id: status string} map (dashboard / member-portal shape). */
@@ -60,18 +90,14 @@ export function countAttendanceFromStatusMap(
   attendance: Record<string, string>,
   rehearsals: RehearsalSlot[],
 ): AttendanceCounts {
-  let attended = 0;
-  let absent = 0;
-  let total = 0;
+  const counts = emptyCounts();
   for (const r of rehearsals) {
     if (!r.is_completed || !r.counts_for_attendance) continue;
-    total++;
+    counts.total++;
     const s = attendance[String(r.id)];
-    if (!s) continue;
-    if (PHYSICALLY_PRESENT_STATUSES.has(s)) attended++;
-    else if (NO_SHOW_STATUSES.has(s)) absent++;
+    if (s) tally(counts, s);
   }
-  return { attended, absent, total };
+  return counts;
 }
 
 /**
@@ -83,21 +109,17 @@ export function countAttendanceFromCellMap(
   cells: Record<number, AttendanceCellValue> | undefined,
   rehearsals: RehearsalSlot[],
 ): AttendanceCounts {
-  let attended = 0;
-  let absent = 0;
-  let total = 0;
-  if (!cells) return { attended, absent, total };
+  const counts = emptyCounts();
+  if (!cells) return counts;
   for (const r of rehearsals) {
     if (!r.is_completed || !r.counts_for_attendance) continue;
     const cell = cells[r.id];
-    if (cell === null) continue; // not in program window — not their rehearsal
-    total++;
+    if (cell === null) continue;
+    counts.total++;
     if (cell === undefined) continue;
-    const s = cell.status;
-    if (PHYSICALLY_PRESENT_STATUSES.has(s)) attended++;
-    else if (NO_SHOW_STATUSES.has(s)) absent++;
+    tally(counts, cell.status);
   }
-  return { attended, absent, total };
+  return counts;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -353,6 +375,11 @@ export function AttendanceTimeline({
               <>
                 <th className="text-right px-2 py-1 text-xs font-medium text-green-600 whitespace-nowrap">出席</th>
                 <th className="text-right px-2 py-1 text-xs font-medium text-orange-500 whitespace-nowrap">缺勤</th>
+                <th className="text-right px-2 py-1 text-xs font-medium text-blue-500 whitespace-nowrap">请假缺勤</th>
+                <th className="text-right px-2 py-1 text-xs font-medium text-blue-500 whitespace-nowrap">请假迟到</th>
+                <th className="text-right px-2 py-1 text-xs font-medium text-blue-500 whitespace-nowrap">请假早退</th>
+                <th className="text-right px-2 py-1 text-xs font-medium text-amber-600 whitespace-nowrap">迟到</th>
+                <th className="text-right px-2 py-1 text-xs font-medium text-orange-400 whitespace-nowrap">早退</th>
                 <th className="text-right px-2 py-1 text-xs font-medium text-gray-400 whitespace-nowrap">共</th>
               </>
             )}
@@ -383,6 +410,11 @@ export function AttendanceTimeline({
                   <>
                     <td className="px-2 text-right text-sm whitespace-nowrap font-semibold text-green-600">{counts.attended}</td>
                     <td className="px-2 text-right text-sm whitespace-nowrap font-semibold text-orange-500">{counts.absent}</td>
+                    <td className="px-2 text-right text-xs whitespace-nowrap text-blue-500">{counts.leaveAbsent}</td>
+                    <td className="px-2 text-right text-xs whitespace-nowrap text-blue-500">{counts.leaveLate}</td>
+                    <td className="px-2 text-right text-xs whitespace-nowrap text-blue-500">{counts.leaveEarly}</td>
+                    <td className="px-2 text-right text-xs whitespace-nowrap text-amber-600">{counts.late}</td>
+                    <td className="px-2 text-right text-xs whitespace-nowrap text-orange-400">{counts.earlyLeave}</td>
                     <td className="px-2 text-right text-sm whitespace-nowrap text-gray-400">{counts.total}</td>
                   </>
                 )}

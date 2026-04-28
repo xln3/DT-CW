@@ -459,6 +459,11 @@ export default function ProgramDetail() {
                       <>
                         <th className="px-2 py-3 text-right text-xs font-medium text-green-600 whitespace-nowrap">出席</th>
                         <th className="px-2 py-3 text-right text-xs font-medium text-orange-500 whitespace-nowrap">缺勤</th>
+                        <th className="px-2 py-3 text-right text-xs font-medium text-blue-500 whitespace-nowrap">请假缺勤</th>
+                        <th className="px-2 py-3 text-right text-xs font-medium text-blue-500 whitespace-nowrap">请假迟到</th>
+                        <th className="px-2 py-3 text-right text-xs font-medium text-blue-500 whitespace-nowrap">请假早退</th>
+                        <th className="px-2 py-3 text-right text-xs font-medium text-amber-600 whitespace-nowrap">迟到</th>
+                        <th className="px-2 py-3 text-right text-xs font-medium text-orange-400 whitespace-nowrap">早退</th>
                         <th className="px-2 py-3 text-right text-xs font-medium text-gray-400 whitespace-nowrap">共</th>
                       </>
                     )}
@@ -505,6 +510,11 @@ export default function ProgramDetail() {
                         <>
                           <td className="px-2 py-3 text-right text-sm whitespace-nowrap font-semibold text-green-600">{counts.attended}</td>
                           <td className="px-2 py-3 text-right text-sm whitespace-nowrap font-semibold text-orange-500">{counts.absent}</td>
+                          <td className="px-2 py-3 text-right text-xs whitespace-nowrap text-blue-500">{counts.leaveAbsent}</td>
+                          <td className="px-2 py-3 text-right text-xs whitespace-nowrap text-blue-500">{counts.leaveLate}</td>
+                          <td className="px-2 py-3 text-right text-xs whitespace-nowrap text-blue-500">{counts.leaveEarly}</td>
+                          <td className="px-2 py-3 text-right text-xs whitespace-nowrap text-amber-600">{counts.late}</td>
+                          <td className="px-2 py-3 text-right text-xs whitespace-nowrap text-orange-400">{counts.earlyLeave}</td>
                           <td className="px-2 py-3 text-right text-sm whitespace-nowrap text-gray-400">{counts.total}</td>
                         </>
                       )}
